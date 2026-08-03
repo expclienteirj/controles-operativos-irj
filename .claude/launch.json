@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "auditoria-irj",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["/Users/matiasarancibia/Desktop/Aeropuertos/Proyecto LIMPIEZA/app/backend/api.py"],
+      "port": 8080,
+      "autoPort": true
+    }
+  ]
+}

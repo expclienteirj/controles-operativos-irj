@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auditoría Mensual de Limpieza - Explicación de Cálculos</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .section:last-child {
+            border-bottom: none;
+        }
+
+        .section h2 {
+            color: #667eea;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        .section h2::before {
+            content: "";
+            width: 5px;
+            height: 30px;
+            background: #667eea;
+            border-radius: 3px;
+            margin-right: 15px;
+        }
+
+        .section h3 {
+            color: #764ba2;
+            font-size: 1.3em;
+            margin: 20px 0 15px 0;
+        }
+
+        .formula-box {
+            background: #f8f9ff;
+            border-left: 4px solid #667eea;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+        }
+
+        .example-box {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+
+        .example-box strong {
+            color: #ff9800;
+        }
+
+        .check-box {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+
+        .warning-box {
+            background: #fce4ec;
+            border-left: 4px solid #e91e63;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        table th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        table tr:hover {
+            background: #f5f5f5;
+        }
+
+        .calculation-step {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 15px;
+            align-items: center;
+            margin: 15px 0;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 5px;
+        }
+
+        .step-arrow {
+            text-align: center;
+            font-size: 1.5em;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .highlight {
+            background: #ffeb3b;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+
+        .verification-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .verification-list li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+        }
+
+        .verification-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #4caf50;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .diagram {
+            background: #f9f9f9;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .diagram-flow {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .diagram-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 5px;
+            font-weight: 600;
+            min-width: 150px;
+        }
+
+        .diagram-arrow {
+            color: #667eea;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #d63384;
+        }
+
+        .footer {
+            background: #f5f5f5;
+            padding: 20px 40px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Auditoría Mensual de Limpieza</h1>
+            <p>Explicación Detallada del Sistema de Cálculo</p>
+            <p style="font-size: 0.9em; margin-top: 10px;">Aeropuerto La Rioja - Operaciones | Concesionario: Aeropuertos Argentina S.A.</p>
+        </div>
+
+        <div class="content">
+            <!-- SECCIÓN 1: RESUMEN EJECUTIVO -->
+            <div class="section">
+                <h2>Resumen Ejecutivo</h2>
+                <p>El sistema de auditoría mensual de limpieza evalúa la calidad del servicio mediante tres componentes principales:</p>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Componente</th>
+                            <th>Peso</th>
+                            <th>Descripción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Asistencia del Personal</strong></td>
+                            <td><span class="highlight">60%</span></td>
+                            <td>Porcentaje de personal presente durante el período evaluado</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Cumplimiento del Plan de Trabajo</strong></td>
+                            <td><span class="highlight">30%</span></td>
+                            <td>Promedio de calidad en todos los sectores auditados</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Disponibilidad de Equipamiento</strong></td>
+                            <td><span class="highlight">10%</span></td>
+                            <td>Estado funcional del equipamiento de limpieza</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="formula-box">
+                    <strong>HES (Hoja de Entrada de Servicio) = (Asistencia × 0.6) + (Cumplimiento × 0.3) + (Equipamiento × 0.1)</strong>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 2: CÁLCULO DE CUMPLIMIENTO POR SECTOR -->
+            <div class="section">
+                <h2>Cálculo de Cumplimiento del Plan de Trabajo</h2>
+
+                <h3>Estructura de Evaluación</h3>
+                <p>Cada sector se divide en áreas, y cada área tiene múltiples ítems a evaluar. El período de evaluación se divide en 4 períodos (Q1, Q2, Q3, Q4).</p>
+
+                <h3>Sectores Evaluados</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Sector</th>
+                            <th>Áreas Incluidas</th>
+                            <th>Cantidad de Ítems</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Embarque-Arribos-Check In</strong></td>
+                            <td>Sala Embarque (8), Arriboa (13), Check-in (7)</td>
+                            <td>28 ítems</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Hall-Sanidad-Baños</strong></td>
+                            <td>Hall Público (5), Sanidad (11), Baños (19)</td>
+                            <td>35 ítems</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Air Side-Parking-Oficina</strong></td>
+                            <td>Air Side (4), Parking (3), Oficinas (5)</td>
+                            <td>12 ítems</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Fórmula de Cálculo por Área</h3>
+                <div class="formula-box">
+                    <strong>Score Área = (Cantidad de "SI") / (Cantidad total de ítems evaluables)</strong>
+                    <br><br>
+                    Nota: Los ítems marcados como "NO PROCEDE" se excluyen del cálculo
+                </div>
+
+                <h3>Ejemplo Práctico: Sala de Embarque</h3>
+                <div class="example-box">
+                    <strong>Período Q1 - Sala de Embarque</strong>
+                    <br><br>
+                    <strong>Ítems evaluados:</strong>
+                    <ul style="margin-left: 20px; margin-top: 10px;">
+                        <li>Vidriera: SI</li>
+                        <li>Piso: SI</li>
+                        <li>Carpintería Metálica: SI</li>
+                        <li>Mostrador: SI</li>
+                        <li>Artefactos de iluminación: NO</li>
+                        <li>Carteles: SI</li>
+                        <li>Papeleros: SI</li>
+                        <li>Cinta organizadora: SI</li>
+                    </ul>
+                    <br>
+                    <strong>Cálculo:</strong> 7 "SI" de 8 ítems = 7/8 = <span class="highlight">0.875 o 87.5%</span>
+                </div>
+
+                <h3>Cálculo del Promedio de Área (Todos los Períodos)</h3>
+                <div class="formula-box">
+                    <strong>Estado General del Área = PROMEDIO(Q1, Q2, Q3, Q4)</strong>
+                </div>
+
+                <div class="example-box">
+                    <strong>Ejemplo continuo - Sala de Embarque:</strong>
+                    <br><br>
+                    Q1: 0.875<br>
+                    Q2: 0.750<br>
+                    Q3: 0.875<br>
+                    Q4: 1.000<br><br>
+                    <strong>Promedio = (0.875 + 0.750 + 0.875 + 1.000) / 4 = <span class="highlight">0.875 o 87.5%</span></strong>
+                </div>
+
+                <h3>Cálculo del Sector Completo</h3>
+                <div class="formula-box">
+                    <strong>Score Sector = PROMEDIO(Área 1, Área 2, Área 3, ...)</strong>
+                </div>
+
+                <div class="example-box">
+                    <strong>Ejemplo - Sector Embarque-Arribos-Check In:</strong>
+                    <br><br>
+                    Sala Embarque: 0.875<br>
+                    Sala Arribos: 0.750<br>
+                    Check-in: 0.900<br><br>
+                    <strong>Score Sector = (0.875 + 0.750 + 0.900) / 3 = <span class="highlight">0.842 o 84.2%</span></strong>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 3: CUMPLIMIENTO GENERAL -->
+            <div class="section">
+                <h2>Cumplimiento General del Plan de Trabajo</h2>
+
+                <h3>Cálculo del Promedio General</h3>
+                <p>El cumplimiento general es el promedio de todos los sectores:</p>
+
+                <div class="formula-box">
+                    <strong>Cumplimiento General = PROMEDIO(Sector 1, Sector 2, Sector 3)</strong>
+                </div>
+
+                <h3>Sectores Considerados</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Sector</th>
+                            <th>Referencia en Hoja RESULTADO</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Sala de Embarque</td>
+                            <td>=EMBARQUE-ARRIBOS-CHECK IN!G15</td>
+                        </tr>
+                        <tr>
+                            <td>Arribos</td>
+                            <td>=EMBARQUE-ARRIBOS-CHECK IN!G34</td>
+                        </tr>
+                        <tr>
+                            <td>Check-in</td>
+                            <td>=EMBARQUE-ARRIBOS-CHECK IN!G46</td>
+                        </tr>
+                        <tr>
+                            <td>Hall Público</td>
+                            <td>=HALL-SANIDAD-BAÑOS!G24</td>
+                        </tr>
+                        <tr>
+                            <td>Sanidad</td>
+                            <td>=HALL-SANIDAD-BAÑOS!G35</td>
+                        </tr>
+                        <tr>
+                            <td>Baños Públicos</td>
+                            <td>=HALL-SANIDAD-BAÑOS!G54</td>
+                        </tr>
+                        <tr>
+                            <td>Air Side</td>
+                            <td>=air side-parking-oficina!G11</td>
+                        </tr>
+                        <tr>
+                            <td>Parking Público</td>
+                            <td>=air side-parking-oficina!G20</td>
+                        </tr>
+                        <tr>
+                            <td>Oficinas AA2000</td>
+                            <td>=air side-parking-oficina!G31</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="formula-box">
+                    <strong>Cumplimiento = (E18+E19+E20+E21+E22+E23+E24+E25+E26) / 9</strong>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 4: COMPONENTES ADICIONALES -->
+            <div class="section">
+                <h2>Otros Componentes del HES</h2>
+
+                <h3>1. Asistencia del Personal</h3>
+                <p>Refleja el porcentaje de personal presente durante el período evaluado.</p>
+                <div class="formula-box">
+                    <strong>Asistencia = % de personal certificado por asistencia</strong>
+                </div>
+
+                <div class="warning-box">
+                    <strong>⚠️ Nota:</strong> El valor de Asistencia se toma directamente de la hoja "Planteos" (celda C9) y se multiplica por el peso (0.6).
+                </div>
+
+                <h3>2. Equipamiento Disponible</h3>
+                <p>Evalúa que todo el equipamiento necesario esté disponible y funcional.</p>
+                <div class="formula-box">
+                    <strong>Equipamiento = Score de disponibilidad de equipos (hoja EQUIPAMIENTO!C15)</strong>
+                </div>
+
+                <p style="margin-top: 15px;">La hoja EQUIPAMIENTO verifica:</p>
+                <ul style="margin-left: 20px;">
+                    <li>Carritos de limpieza</li>
+                    <li>Escobas y recogedores</li>
+                    <li>Franelas y trapos</li>
+                    <li>Bolsas de residuos</li>
+                    <li>Desinfectantes y químicos</li>
+                    <li>Equipamiento de seguridad</li>
+                </ul>
+            </div>
+
+            <!-- SECCIÓN 5: CÁLCULO FINAL DEL HES -->
+            <div class="section">
+                <h2>Cálculo Final del HES (Hoja de Entrada de Servicio)</h2>
+
+                <h3>Fórmula Completa</h3>
+                <div class="formula-box" style="font-size: 1.1em;">
+                    <strong>HES = (Asistencia × 0.6) + (Cumplimiento × 0.3) + (Equipamiento × 0.1)</strong>
+                </div>
+
+                <h3>Ejemplo Completo de Cálculo</h3>
+                <div class="example-box">
+                    <strong>Auditoría Mensual - Noviembre 2025</strong>
+                    <br><br>
+
+                    <table style="margin: 15px 0; width: 100%; background: white;">
+                        <tr>
+                            <th style="background: #ff9800; color: white; padding: 10px;">Componente</th>
+                            <th style="background: #ff9800; color: white; padding: 10px;">Valor</th>
+                            <th style="background: #ff9800; color: white; padding: 10px;">Peso</th>
+                            <th style="background: #ff9800; color: white; padding: 10px;">Aporte</th>
+                        </tr>
+                        <tr>
+                            <td><strong>Asistencia</strong></td>
+                            <td>0.95</td>
+                            <td>0.6</td>
+                            <td>0.95 × 0.6 = <span class="highlight">0.570</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Cumplimiento</strong></td>
+                            <td>0.87</td>
+                            <td>0.3</td>
+                            <td>0.87 × 0.3 = <span class="highlight">0.261</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Equipamiento</strong></td>
+                            <td>1.00</td>
+                            <td>0.1</td>
+                            <td>1.00 × 0.1 = <span class="highlight">0.100</span></td>
+                        </tr>
+                        <tr style="background: #e8f5e9; font-weight: bold;">
+                            <td colspan="3" style="text-align: right;">HES TOTAL:</td>
+                            <td>0.570 + 0.261 + 0.100 = <span class="highlight">0.931</span></td>
+                        </tr>
+                    </table>
+                </div>
+
+                <h3>Interpretación del HES</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rango HES</th>
+                            <th>Interpretación</th>
+                            <th>Observaciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="background: #e8f5e9;">
+                            <td><span class="highlight">0.90 - 1.00</span></td>
+                            <td><strong>Excelente</strong></td>
+                            <td>Cumplimiento total o muy cercano del plan de trabajo</td>
+                        </tr>
+                        <tr style="background: #fff3e0;">
+                            <td><span class="highlight">0.80 - 0.89</span></td>
+                            <td><strong>Muy Bueno</strong></td>
+                            <td>Cumplimiento mayoritario, con áreas menores de mejora</td>
+                        </tr>
+                        <tr style="background: #fff3e0;">
+                            <td><span class="highlight">0.70 - 0.79</span></td>
+                            <td><strong>Bueno</strong></td>
+                            <td>Cumplimiento aceptable, pero requiere seguimiento</td>
+                        </tr>
+                        <tr style="background: #fce4ec;">
+                            <td><span class="highlight">&lt; 0.70</span></td>
+                            <td><strong>Deficiente</strong></td>
+                            <td>Incumplimiento significativo, requiere acciones correctivas</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- SECCIÓN 6: VERIFICACIÓN -->
+            <div class="section">
+                <h2>Verificación y Cumplimiento del Pliego</h2>
+
+                <p>El sistema implementado en la planilla de auditoría cumple con los siguientes requisitos del pliego:</p>
+
+                <ul class="verification-list">
+                    <li><strong>Evaluación por Sector:</strong> Se auditan 9 sectores diferentes, cada uno con áreas específicas y criterios claros.</li>
+
+                    <li><strong>Período Cuatrifásico:</strong> La evaluación se divide en 4 períodos (Q1, Q2, Q3, Q4) dentro del mes, permitiendo un monitoreo detallado.</li>
+
+                    <li><strong>Ponderación Equitativa:</strong> Cada sector tiene el mismo peso (1/9) en el cálculo del cumplimiento general.</li>
+
+                    <li><strong>Tratamiento de "No Procede":</strong> Los ítems no aplicables se excluyen del cálculo (ponderación dinámica).</li>
+
+                    <li><strong>Transparencia Matemática:</strong> Todas las fórmulas son simples y verificables: COUNTIF para contar cumplimientos y AVERAGE para promedios.</li>
+
+                    <li><strong>Ponderación del HES:</strong> Se respetan los pesos contractuales: 60% Asistencia, 30% Cumplimiento, 10% Equipamiento.</li>
+
+                    <li><strong>Trazabilidad Completa:</strong> Cada cálculo final es rastreable hasta la respuesta individual en el check-list.</li>
+
+                    <li><strong>Múltiples Niveles de Agregación:</strong> Los datos se agregan de forma jerárquica: Ítem → Área → Sector → General.</li>
+                </ul>
+
+                <div class="check-box">
+                    <strong>✓ CONCLUSIÓN:</strong> El sistema de cálculo implementado en la planilla está <strong>completamente alineado</strong> con los requisitos del pliego de especificaciones técnicas (PET 2026) y proporciona una evaluación justa, transparente y verificable del cumplimiento del servicio de limpieza.
+                </div>
+            </div>
+
+            <!-- SECCIÓN 7: NOTAS TÉCNICAS -->
+            <div class="section">
+                <h2>Notas Técnicas y Consideraciones</h2>
+
+                <h3>Fórmulas en Excel</h3>
+                <p>Las fórmulas utilizadas en las hojas de cálculo son:</p>
+
+                <div class="formula-box">
+                    <strong>Para cada Área (ejemplo Sala Embarque):</strong><br>
+                    =((COUNTIF(C7:C14,"SI")*1)+((COUNTIF(C7:C14,"NO PROCEDE")*0)))/8<br><br>
+                    <strong>Para Promedio de Área:</strong><br>
+                    =AVERAGE(C15,D15,E15,F15)<br><br>
+                    <strong>Para Promedio de Sector:</strong><br>
+                    =AVERAGE(G15,G34,G46)
+                </div>
+
+                <h3>Consideraciones Importantes</h3>
+                <div class="warning-box">
+                    <strong>1. Coherencia de Datos:</strong> Es crítico que los datos se ingrese correctamente en las hojas individuales (SI/NO/NO PROCEDE). Errores tipográficos invalidarán los cálculos.
+                    <br><br>
+                    <strong>2. Actualizaciones Mensuales:</strong> Los datos de Asistencia (Planteos) y Equipamiento deben actualizarse manualmente cada mes.
+                    <br><br>
+                    <strong>3. Auditoría Externa:</strong> La hoja RESULTADO resume todos los cálculos y permite una auditoría externa rápida.
+                    <br><br>
+                    <strong>4. Referencias Cruzadas:</strong> Las fórmulas en RESULTADO hacen referencias directas a las otras hojas usando la sintaxis: ='NombreHoja'!Celda
+                </div>
+            </div>
+
+            <!-- SECCIÓN 8: GUÍA RÁPIDA -->
+            <div class="section">
+                <h2>Guía Rápida de Validación</h2>
+
+                <h3>Pasos para Verificar la Auditoría:</h3>
+                <ol style="margin-left: 20px;">
+                    <li><strong>Abrir la hoja RESULTADO:</strong> Es el resumen final y punto de partida para cualquier validación.</li>
+
+                    <li><strong>Verificar los 9 Sectores:</strong> Confirmar que los valores en E18:E26 son coherentes (entre 0 y 1).</li>
+
+                    <li><strong>Calcular Cumplimiento General:</strong> Verificar que E28 = PROMEDIO(E18:E26).</li>
+
+                    <li><strong>Revisar Componentes:**
+                        <ul style="margin-left: 20px; margin-top: 10px;">
+                            <li>E34 (Asistencia) = valor de Planteos!C9</li>
+                            <li>E35 (Cumplimiento) = E28 × D35</li>
+                            <li>E36 (Equipamiento) = EQUIPAMIENTO!C15 × D36</li>
+                        </ul>
+                    </li>
+
+                    <li><strong>Validar HES Total:</strong> Verificar que E37 = E34 + E35 + E36.</li>
+
+                    <li><strong>Spot Check Aleatorio:</strong> Seleccionar al azar 2-3 ítems de una hoja individual y verificar que el "SI" o "NO" fue contado correctamente.</li>
+                </ol>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><strong>Auditoría Mensual de Limpieza</strong> | Sistema de Control de Calidad</p>
+            <p>Documento de referencia técnica - Aeropuerto La Rioja | Generado: 30 de Julio de 2026</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,36 @@
+# Credenciales. Nunca se versionan: la clave de servicio de Supabase da acceso
+# total al proyecto, saltándose cualquier permiso.
+.env
+.env.*
+!.env.example
+
+# Base y evidencia locales: son datos de trabajo, no código. El comodín cubre
+# también las copias (data.bak/, data-viejo/...), que traen fotos de evidencia
+# real de recorridas ya hechas.
+app/backend/data/
+app/backend/data*/
+*.db
+*.db-journal
+*.db-wal
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Vercel
+.vercel/
+
+# macOS y temporales de Office
+.DS_Store
+~$*
+*.log
+
+# Documentación fuente del contrato: pliegos, manual LoS y planillas.
+# Son 4,8 MB de binarios que no se versionan bien, no hacen falta para el
+# deploy y pueden contener información que no corresponde publicar. Siguen en
+# la carpeta local; simplemente no viajan al repositorio.
+*.pdf
+*.docx
+*.xlsx

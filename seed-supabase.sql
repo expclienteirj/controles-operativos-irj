@@ -1,0 +1,179 @@
+-- Datos maestros de Controles Operativos IRJ (seed).
+--
+-- Generado ejecutando seed.py contra Postgres y volcando el resultado, así que
+-- es exactamente lo que produce la aplicación, no una transcripción a mano.
+--
+-- Ejecutar en el SQL Editor de Supabase DESPUÉS de esquema-supabase.sql.
+-- Todas las filas llevan ON CONFLICT DO NOTHING: repetirlo no duplica nada ni
+-- pisa valores que el admin haya ajustado.
+
+
+-- config: 45 fila(s)
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('aeropuerto_categoria', '"G5"', 'general', 'Categoría del aeropuerto', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('aeropuerto_codigo', '"IRJ"', 'general', 'Código IATA/OACI del aeropuerto', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('aeropuerto_nombre', '"Aeropuerto Capitán Vicente Almandos Almonacid"', 'general', 'Nombre del aeropuerto', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('asientos_minimo', '38', 'los', '3.5 — Mínimo de asientos utilizables en preembarque (IRJ)', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('asientos_parametros_irj', '{"pico_operaciones_diarias": 2, "pico_simultaneas": 1, "pax_promedio_aeronave": 76, "porcentaje_minimo_sentados": 0.5, "porcentaje_optimo": [0.5, 0.7]}', 'los', '3.5 — Parámetros de dimensionamiento (regla IATA)', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('banos_criterios_hallazgo', '{"bachas": "Mojada o con papeles", "jabonera": "Nivel de jabón menor al 10%", "toallero": "Toallas por debajo del 10%", "papel_higienico": "Disponibilidad menor al 10%", "cestos": "Lleno por encima del 80% de su capacidad", "espejos": "Sucios o manchados", "pisos": "Derrames por falta de limpieza", "inodoro": "Sucio, con derrames u obstruido", "mingitorios": "Sucios, con papeles u obstruidos", "cambiador_bebes": "Derrames o suciedad"}', 'los', '3.1.b — Texto de ayuda: qué constituye un hallazgo por equipo', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('banos_limpieza_objetivos', '{"BACHAS": {"bachas": 0.8, "jabonera": 0.8, "toallero": 0.8, "cestos": 0.8, "espejos": 1.0, "pisos": 1.0, "cambiador_bebes": 1.0}, "BOXES": {"papel_higienico": 0.8, "cestos": 0.8, "inodoro": 0.8}, "MINGITORIOS": {"mingitorios": 0.8}, "PMR": {"bachas": 1.0, "jabonera": 1.0, "toallero": 1.0, "papel_higienico": 1.0, "cestos": 1.0, "inodoro": 1.0}, "RECINTO_BEBES": {"bachas": 1.0, "jabonera": 1.0, "toallero": 1.0, "cestos": 1.0, "cambiador": 1.0}}', 'los', '3.1.b — Objetivo de limpieza por equipo dentro de cada sector de baño', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('banos_link_checklist', '{"bachas": ["lavabos"], "jabonera": ["jabonera"], "toallero": ["toallero"], "papel_higienico": ["papel_higienico"], "cestos": ["tachos_de_residuos"], "espejos": ["espejos", "espejos_gral"], "pisos": ["pisos_gral", "piso", "pisos"], "inodoro": ["inodoros_mingitorios", "inodoro_mingitorio"], "mingitorios": ["inodoros_mingitorios", "inodoro_mingitorio"], "cambiador_bebes": ["cambiador_de_bebes", "cambiador"], "cambiador": ["cambiador_de_bebes", "cambiador"]}', 'los', '3.1.b — Ítems del check-list diario que alimentan cada equipo del LoS de baños. Se promedian sobre los días auditados del mes.', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('banos_objetivo_nucleo', '{"DAMAS": 0.8, "CABALLEROS": 0.8, "PMR": 1.0, "RECINTO_BEBES": 1.0}', 'los', '3.1.a — Objetivo de artefactos en servicio por tipo de núcleo', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('banos_sectores_checklist', '["sala_arribos", "banos_hall", "sanidad"]', 'los', '3.1.b — Sectores del check-list que corresponden a baños', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('cobertura_minima_mes', '0.8', 'general', 'Proporción mínima de días del mes que deben tener control cerrado para que el resultado se considere representativo. Por debajo de este valor la certificación se emite con una advertencia visible. Los días sin auditar nunca penalizan al contratista: quedan fuera del promedio.', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('concesionario', '"Aeropuertos Argentina S.A."', 'general', 'Concesionario', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('confort_termico', '{"VERANO": {"categoria": "B", "objetivo": 24.5, "tolerancia": 1.5, "min": 23.0, "max": 26.0, "vel_aire_max": 0.19, "ppd_max": 0.1}, "INVIERNO": {"categoria": "C", "objetivo": 22.0, "tolerancia": 3.0, "min": 19.0, "max": 25.0, "vel_aire_max": 0.21, "ppd_max": 0.15}}', 'los', '3.2 — IRJ: verano categoría B, invierno categoría C', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('confort_zonas', '["Hall público", "Arribos", "Embarque", "Bar"]', 'los', '3.2 — Zonas donde se mide la temperatura operativa. Editable: si se habilita una sala nueva, se agrega acá sin tocar la aplicación.', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('elevacion_horas_dia', '24.0', 'los', '3.7 — Base horaria diaria. 24 hs: es la única base con la que los topes de 60/48 hs y los mínimos de 91,66%/93% resultan coherentes entre sí', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('elevacion_indisp_max_evento_hs', '48', 'los', '3.7 — Indisponibilidad máxima por evento', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('elevacion_umbrales', '{"CON_REDUNDANCIA": {"disponibilidad_min": 0.9166, "indisp_max_mensual_hs": 60}, "SIN_REDUNDANCIA": {"disponibilidad_min": 0.93, "indisp_max_mensual_hs": 48}}', 'los', '3.7 — Disponibilidad mínima y tope mensual de indisponibilidad', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('foto_obligatoria_desvio', 'true', 'general', 'Exigir foto al registrar un desvío', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('gel_categoria_irj', '"APROX_NO_PRECISION"', 'los', '3.9 — Categoría aplicable a IRJ (aproximaciones que no son de precisión)', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('gel_tiempos_conmutacion', '{"APROX_NO_PRECISION": 15, "APROX_PRECISION_CAT_I": 15, "APROX_PRECISION_CAT_II_III": 1}', 'los', '3.9 — Tiempo máximo de conmutación por categoría de ayuda (RAAC 154)', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('horario_operativo_fin', '"21:00"', 'general', 'Fin del horario operativo', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('horario_operativo_inicio', '"07:00"', 'general', 'Inicio del horario operativo', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('horas_operativas_dia', '14', 'general', 'Horas operativas por día. Base del 100% exigido a pista y rodajes (3.10)', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('iluminacion_horario_invierno', '"20:00"', 'los', '3.3 — Horario de medición en invierno', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('iluminacion_horario_verano', '"22:00"', 'los', '3.3 — Horario de medición en verano', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('iluminacion_objetivo', '0.9', 'los', '3.3 — Mínimo de luminarias encendidas', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('infraestructura_escala', '{"A": "Satisfactorio", "B": "Mejoras (aceptable, sin acción inmediata)", "C": "Mejoras considerables (requiere acción correctiva)", "D": "Insatisfactorio (riesgo a las personas, acción inmediata)"}', 'los', '3.4 — Descripción de la escala A/B/C/D', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('infraestructura_grados_cumplen', '["A", "B"]', 'los', '3.4 — Grados que se consideran cumplimiento (objetivo IRJ: B o mejor)', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('infraestructura_subitems', '{"demarcacion_vial": ["parking", "sendas_peatonales", "cordones"], "alfombras": ["desgaste_deshilachado", "despegado_separacion", "manchas_decoloracion"], "cielorraso": ["estado_general"], "vidrios": ["estado_general"], "pisos_interiores": ["estado_general"], "puertas": ["cerraduras", "alineacion_marco", "frenos"], "veredas_vialidades": ["grietas", "superficies_danadas"], "paredes_pintura": ["estado_general"]}', 'los', '3.4 — Sub-ítems y criterios de infraestructura', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('inicio_invierno', '"04-01"', 'general', 'Fecha de cambio a temporada invierno (MM-DD)', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('inicio_verano', '"10-01"', 'general', 'Fecha de cambio a temporada verano (MM-DD)', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('limpieza_terminal_link_checklist', '{"contenedores_basura": ["contenedores_de_basura"], "cestos_interiores": ["papeleros"], "cestos_externos": ["cestos_residuos", "residuos"], "telaranias_polvo": ["techo"], "limpieza_vidrios": ["vidriera", "vidrieria", "vidrios", "vidrieria_carpinteria_metalica"], "corredores_peatonales": ["pisos", "piso", "pisos_gral", "superficie"]}', 'los', '3.8 — Ítems del check-list diario que alimentan cada sub-ítem de limpieza de terminal.', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('limpieza_terminal_subitems', '{"contenedores_basura": "Nivel de llenado antes de la recolección", "cestos_interiores": "Nivel de llenado", "cestos_externos": "Nivel de llenado", "telaranias_polvo": "A sin acumulación · B mínima en bajo tránsito · C moderada en áreas visibles · D visible en alto tránsito", "limpieza_vidrios": "A sin suciedad · B leve en baja visibilidad · C visible en alto tránsito · D acumulación considerable", "corredores_peatonales": "A sin residuos · B mínimos en bajo tránsito · C moderados en áreas accesibles · D acumulación significativa"}', 'los', '3.8 — Sub-ítems de limpieza de terminal', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('limpieza_terminal_umbrales_llenado', '{"A": [0, 50], "B": [51, 65], "C": [66, 80], "D": [81, 100]}', 'los', '3.8 — Umbrales de llenado para contenedores y cestos', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('pasarelas_aplica', 'false', 'los', '3.11 — IRJ no figura en la Tabla 10 del manual: no posee mangas', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('pci_escala', '[{"min": 85, "max": 100, "etiqueta": "Bueno"}, {"min": 70, "max": 85, "etiqueta": "Satisfactorio"}, {"min": 55, "max": 70, "etiqueta": "Razonable"}, {"min": 40, "max": 55, "etiqueta": "Malo"}, {"min": 25, "max": 40, "etiqueta": "Muy malo"}, {"min": 10, "max": 25, "etiqueta": "Grave"}, {"min": 0, "max": 10, "etiqueta": "Nefasto"}]', 'los', '3.10 — Escala de referencia de PCI', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('pci_pista', '{"umbral": 70, "proporcion_min": 0.85}', 'los', '3.10 — 85% de secciones de pista con PCI > 70', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('pci_rodaje', '{"umbral": 60, "proporcion_min": 0.7}', 'los', '3.10 — 70% de secciones de rodaje con PCI > 60', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('penalizacion_nc_confirmada', 'false', 'certificacion', 'Marcar en True una vez acordado el criterio de penalización por no conformidad con el contratista. Mientras sea False, la certificación se emite con una advertencia visible en pantalla y en el informe PDF.', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('penalizacion_nc_tope', '0.2', 'certificacion', '⚠ VALOR PROVISORIO, NO SURGE DEL PLIEGO — Tope del descuento acumulado por no conformidades.', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('penalizacion_por_nc', '0.01', 'certificacion', '⚠ VALOR PROVISORIO, NO SURGE DEL PLIEGO — Descuento aplicado al ítem Calidad de servicio por cada no conformidad abierta. El PET indica que la calidad se ajusta por la cantidad de no conformidades pero no fija la fórmula. Acordar el criterio real con el contratista y confirmarlo.', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('periodicidad_control', '"DIARIA"', 'general', 'El control de limpieza es diario: se exige uno por cada día del mes.', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('pesos', '{"documentacion": 0.1, "ley_19587": 0.1, "programacion_trabajos": 0.4, "maquinarias": 0.1, "insumos": 0.1, "calidad_servicio": 0.2}', 'certificacion', '2.3 — Ponderaciones de los 6 ítems (PCP 4.3). Editables de común acuerdo', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('tomas_por_100_pax', '25', 'los', '3.6 — Tomas exigidas cada 100 pasajeros en hora pico, por puerta', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('veredas_umbrales', '{"grieta_separacion_d_cm": 1.0, "superficie_b_max_cm2": 40, "superficie_b_max_diametro_cm": 15, "superficie_b_max_profundidad_cm": 2, "escalonamiento_c_min_cm": 0.5, "escalonamiento_c_max_cm": 1.0, "superficie_d_min_cm2": 10000, "superficie_d_min_profundidad_cm": 4}', 'los', '3.4 — Umbrales cuantitativos de veredas y vialidades', '1') ON CONFLICT DO NOTHING;
+
+-- sectores_limpieza: 9 fila(s)
+INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('1', 'sala_embarque', 'Sala de embarque', '1', '1') ON CONFLICT DO NOTHING;
+INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('2', 'sala_arribos', 'Sala de arribos - Baño arribos', '2', '1') ON CONFLICT DO NOTHING;
+INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('3', 'check_in', 'Sector check-in', '3', '1') ON CONFLICT DO NOTHING;
+INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('4', 'hall_central', 'Hall central', '4', '1') ON CONFLICT DO NOTHING;
+INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('5', 'sanidad', 'Sanidad', '5', '1') ON CONFLICT DO NOTHING;
+INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('6', 'banos_hall', 'Baños hall - Sector público', '6', '1') ON CONFLICT DO NOTHING;
+INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('7', 'air_side', 'Air side', '7', '1') ON CONFLICT DO NOTHING;
+INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('8', 'estacionamiento', 'Estacionamiento', '8', '1') ON CONFLICT DO NOTHING;
+INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('9', 'oficinas_aa', 'Oficinas Aeropuertos Argentina (Operaciones)', '9', '1') ON CONFLICT DO NOTHING;
+SELECT setval(pg_get_serial_sequence('sectores_limpieza', 'id'), COALESCE((SELECT MAX(id) FROM sectores_limpieza), 1), true);
+
+-- items_limpieza: 85 fila(s)
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('1', '1', 'vidriera', 'Vidriera', '1', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('2', '1', 'piso', 'Piso', '2', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('3', '1', 'carpinteria_metalica', 'Carpintería metálica', '3', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('4', '1', 'mostrador', 'Mostrador', '4', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('5', '1', 'artefactos_de_iluminacion', 'Artefactos de iluminación', '5', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('6', '1', 'carteles_aircom_media', 'Carteles - AIRCOM & Media', '6', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('7', '1', 'papeleros', 'Papeleros', '7', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('8', '1', 'cinta_organizadora', 'Cinta organizadora', '8', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('9', '1', 'techo', 'Techo', '9', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('10', '2', 'pisos_gral', 'Pisos - Gral', '1', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('11', '2', 'vidrieria_carpinteria_metalica', 'Vidriería - Carpintería metálica', '2', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('12', '2', 'inodoro_mingitorio', 'Inodoro - Mingitorio', '3', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('13', '2', 'lavabos', 'Lavabos', '4', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('14', '2', 'griferia', 'Grifería', '5', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('15', '2', 'marmol', 'Mármol', '6', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('16', '2', 'espejos_gral', 'Espejos - Gral', '7', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('17', '2', 'rejillas_piso_techo', 'Rejillas - Piso - Techo', '8', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('18', '2', 'jabonera', 'Jabonera', '9', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('19', '2', 'toallero', 'Toallero', '10', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('20', '2', 'tachos_de_residuos', 'Tachos de residuos', '11', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('21', '2', 'puertas', 'Puertas', '12', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('22', '2', 'artefactos_de_iluminacion', 'Artefactos de iluminación', '13', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('23', '2', 'cinta_equipajes', 'Cinta equipajes', '14', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('24', '2', 'techo', 'Techo', '15', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('25', '3', 'mostradores', 'Mostradores', '1', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('26', '3', 'papeleros', 'Papeleros', '2', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('27', '3', 'artefactos_de_iluminacion', 'Artefactos de iluminación', '3', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('28', '3', 'columnas_de_acero_inoxidable', 'Columnas de acero inoxidable', '4', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('29', '3', 'cinta_transportadora_de_equipajes', 'Cinta transportadora de equipajes', '5', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('30', '3', 'pisos', 'Pisos', '6', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('31', '3', 'techo', 'Techo', '7', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('32', '4', 'vidrieria', 'Vidriería', '1', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('33', '4', 'carpinteria_metalica', 'Carpintería metálica', '2', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('34', '4', 'artefactos_de_iluminacion_exterior', 'Artefactos de iluminación - Exterior', '3', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('35', '4', 'artefactos_de_iluminacion_interior', 'Artefactos de iluminación - Interior', '4', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('36', '4', 'vereda_exterior_ingresos', 'Vereda exterior - Ingresos', '5', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('37', '4', 'alfombras', 'Alfombras', '6', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('38', '4', 'pisos', 'Pisos', '7', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('39', '4', 'carteles_aircom_media', 'Carteles - Aircom & Media', '8', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('40', '4', 'papeleros', 'Papeleros', '9', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('41', '4', 'ceniceros', 'Ceniceros', '10', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('42', '4', 'columnas_acero_inoxidable', 'Columnas acero inoxidable', '11', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('43', '4', 'tandem', 'Tándem', '12', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('44', '4', 'monitores', 'Monitores', '13', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('45', '4', 'sector_experiencia_al_cliente', 'Sector experiencia al cliente', '14', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('46', '4', 'rejillas_pared_toma_aire', 'Rejillas pared (toma aire)', '15', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('47', '4', 'alero', 'Alero', '16', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('48', '4', 'bases_para_elementos_electronicos', 'Bases para elementos electrónicos', '17', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('49', '4', 'techo', 'Techo', '18', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('50', '5', 'piso', 'Piso', '1', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('51', '5', 'puertas', 'Puertas', '2', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('52', '5', 'bajo_mesada', 'Bajo mesada', '3', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('53', '5', 'cambiador', 'Cambiador', '4', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('54', '5', 'ante_bano', 'Ante baño', '5', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('55', '5', 'techo', 'Techo', '6', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('56', '6', 'pisos_gral', 'Pisos gral', '1', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('57', '6', 'azulejos', 'Azulejos', '2', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('58', '6', 'lavabos', 'Lavabos', '3', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('59', '6', 'griferia', 'Grifería', '4', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('60', '6', 'marmol', 'Mármol', '5', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('61', '6', 'espejos', 'Espejos', '6', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('62', '6', 'tachos_de_residuos', 'Tachos de residuos', '7', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('63', '6', 'puertas', 'Puertas', '8', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('64', '6', 'artefactos_de_iluminacion', 'Artefactos de iluminación', '9', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('65', '6', 'jabonera', 'Jabonera', '10', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('66', '6', 'toallero', 'Toallero', '11', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('67', '6', 'papel_higienico', 'Papel higiénico', '12', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('68', '6', 'cambiador_de_bebes', 'Cambiador de bebés', '13', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('69', '6', 'inodoros_mingitorios', 'Inodoros - Mingitorios', '14', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('70', '6', 'gabinete_bomberos', 'Gabinete bomberos', '15', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('71', '6', 'techo', 'Techo', '16', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('72', '7', 'cestos_fod', 'Cestos FOD', '1', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('73', '7', 'cestos_residuos', 'Cestos residuos', '2', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('74', '7', 'fod', 'FOD', '3', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('75', '7', 'plataforma_auxiliar_patio_companias', 'Plataforma auxiliar - Patio compañías', '4', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('76', '8', 'cordones', 'Cordones', '1', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('77', '8', 'residuos', 'Residuos', '2', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('78', '8', 'superficie', 'Superficie', '3', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('79', '8', 'contenedores_de_basura', 'Contenedores de basura', '4', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('80', '9', 'pisos_gral', 'Pisos gral', '1', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('81', '9', 'mobiliario', 'Mobiliario', '2', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('82', '9', 'vidrios', 'Vidrios', '3', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('83', '9', 'tachos_de_residuos', 'Tachos de residuos', '4', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('84', '9', 'artefactos_de_iluminacion', 'Artefactos de iluminación', '5', '1') ON CONFLICT DO NOTHING;
+INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('85', '9', 'techo', 'Techo', '6', '1') ON CONFLICT DO NOTHING;
+SELECT setval(pg_get_serial_sequence('items_limpieza', 'id'), COALESCE((SELECT MAX(id) FROM items_limpieza), 1), true);
+
+-- equipamiento_limpieza: 6 fila(s)
+INSERT INTO equipamiento_limpieza (id,clave,nombre,exigido,orden) VALUES ('1', 'lavadora_automatica_control_a_pie', 'Lavadora automática (control a pie)', '1', '1') ON CONFLICT DO NOTHING;
+INSERT INTO equipamiento_limpieza (id,clave,nombre,exigido,orden) VALUES ('2', 'lustradora_rotativa', 'Lustradora (rotativa)', '1', '2') ON CONFLICT DO NOTHING;
+INSERT INTO equipamiento_limpieza (id,clave,nombre,exigido,orden) VALUES ('3', 'aspiradora_de_polvo_industrial', 'Aspiradora de polvo (industrial)', '1', '3') ON CONFLICT DO NOTHING;
+INSERT INTO equipamiento_limpieza (id,clave,nombre,exigido,orden) VALUES ('4', 'hidrolavadora', 'Hidrolavadora', '1', '4') ON CONFLICT DO NOTHING;
+INSERT INTO equipamiento_limpieza (id,clave,nombre,exigido,orden) VALUES ('5', 'sopladora', 'Sopladora', '1', '5') ON CONFLICT DO NOTHING;
+INSERT INTO equipamiento_limpieza (id,clave,nombre,exigido,orden) VALUES ('6', 'andamio_escalera', 'Andamio / Escalera', '1', '6') ON CONFLICT DO NOTHING;
+SELECT setval(pg_get_serial_sequence('equipamiento_limpieza', 'id'), COALESCE((SELECT MAX(id) FROM equipamiento_limpieza), 1), true);
+
+-- los_items: 11 fila(s)
+INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('1', 'banos', 'Baños', '1', '1', 'DERIVADO', 'nucleos_sanitarios') ON CONFLICT DO NOTHING;
+INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('2', 'confort_termico', 'Confort térmico', '2', '1', 'MENSUAL', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('3', 'iluminacion', 'Iluminación', '3', '1', 'DIARIO', 'luminarias_sector') ON CONFLICT DO NOTHING;
+INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('4', 'infraestructura', 'Estado de infraestructura', '4', '1', 'DIARIO', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('5', 'asientos_preembarque', 'Asientos en preembarque', '5', '1', 'DIARIO', 'asientos_preembarque') ON CONFLICT DO NOTHING;
+INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('6', 'puntos_carga', 'Puntos de carga', '6', '1', 'DIARIO', 'puertas_embarque') ON CONFLICT DO NOTHING;
+INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('7', 'medios_elevacion', 'Medios de elevación', '7', '1', 'POR_EVENTO', 'medios_elevacion') ON CONFLICT DO NOTHING;
+INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('8', 'limpieza_terminal', 'Limpieza de terminal', '8', '1', 'DERIVADO', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('9', 'gel', 'Grupos electrógenos (GEL)', '9', '1', 'MENSUAL', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('10', 'pista_rodajes', 'Pista y rodajes', '10', '1', 'MENSUAL', 'secciones_pavimento') ON CONFLICT DO NOTHING;
+INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('11', 'pasarelas', 'Pasarelas telescópicas', '11', '0', 'MENSUAL', NULL) ON CONFLICT DO NOTHING;
+SELECT setval(pg_get_serial_sequence('los_items', 'id'), COALESCE((SELECT MAX(id) FROM los_items), 1), true);

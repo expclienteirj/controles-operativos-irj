@@ -1,0 +1,707 @@
+/* Controles Operativos IRJ — estilos tablet-first (viewport ~10", uso táctil).
+   Objetivo de diseño: el auditor recorre el aeropuerto con la tablet en una
+   mano. Todo objetivo táctil mide 48px como mínimo y las acciones frecuentes
+   quedan al alcance del pulgar. */
+
+:root {
+  --azul: #0b3d6b;
+  --azul-claro: #1565a8;
+  /* Verde, ámbar y gris bajados de luminosidad respecto de la primera versión:
+     los tonos originales no llegaban a 4.5:1 (WCAG AA) para texto normal en
+     varias combinaciones reales de la app (chip de estado sobre su fondo,
+     aviso ámbar, botón "Confirmar"). Estos sí, sin cambiar el carácter de la
+     paleta. Verificado con el validador de contraste de la skill dataviz. */
+  --verde: #177d43;
+  --verde-fondo: #e7f5ec;
+  --amarillo: #9f5f00;
+  --amarillo-fondo: #fdf3e0;
+  --rojo: #c0392b;
+  --rojo-fondo: #fdecea;
+  --gris: #686f7d;
+  --gris-fondo: #f1f3f5;
+  --borde: #d7dce2;          /* decorativo: bordes de tarjeta, no exige 3:1 */
+  --borde-campo: #929599;    /* bordes de input/select: exige 3:1 contra blanco */
+  --texto: #1a1f26;
+  --fondo: #f7f9fb;
+  --blanco: #fff;
+  --sombra: 0 1px 3px rgba(16, 24, 40, .1), 0 1px 2px rgba(16, 24, 40, .06);
+  --radio: 12px;
+  --tap: 48px;
+  --foco: 2px solid #0b57a4;
+  --foco-offset: 2px;
+}
+
+* { box-sizing: border-box; }
+
+/* Foco de teclado visible en toda la app. Antes solo los <input> lo tenían:
+   el resto de los controles (botones, tarjetas de sector, celdas del
+   calendario) no mostraban ningún indicador al navegar con teclado, lo cual
+   dejaba la app inoperable sin mouse/touch (falla WCAG 2.4.7). */
+button:focus-visible, a:focus-visible, [tabindex]:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: var(--foco); outline-offset: var(--foco-offset);
+}
+/* Los inputs ya tienen su propio estilo de foco más abajo (con cambio de
+   borde); acá solo se evita el doble contorno. */
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--fondo);
+  color: var(--texto);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Evita el zoom accidental por doble tap y la selección al arrastrar. */
+button, .tocable { touch-action: manipulation; user-select: none; }
+
+/* ---------------------------------------------------------------- splash -- */
+.splash {
+  height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px; color: var(--gris);
+}
+.splash-logo {
+  width: 88px; height: 88px; border-radius: 22px; background: var(--azul);
+  color: #fff; font-size: 30px; font-weight: 700; letter-spacing: 1px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ------------------------------------------------------------------ app -- */
+.app { display: flex; flex-direction: column; min-height: 100vh; }
+
+.barra {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--azul); color: #fff;
+  padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top));
+  display: flex; align-items: center; gap: 12px;
+  box-shadow: var(--sombra);
+}
+.barra h1 { font-size: 17px; margin: 0; font-weight: 600; flex: 1; }
+.barra .sub { font-size: 13px; opacity: .8; font-weight: 400; display: block; }
+
+.btn-volver {
+  background: rgba(255,255,255,.15); color: #fff; border: 0;
+  width: var(--tap); height: var(--tap); border-radius: 10px;
+  font-size: 22px; cursor: pointer; flex-shrink: 0;
+}
+.btn-volver:active { background: rgba(255,255,255,.3); }
+
+.contenido { flex: 1; padding: 16px; padding-bottom: 96px; max-width: 1100px;
+             width: 100%; margin: 0 auto; }
+
+/* --------------------------------------------------------- estado de red -- */
+.chip-sync {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 6px 12px; border-radius: 999px;
+  background: rgba(255,255,255,.15); cursor: pointer; border: 0; color: #fff;
+  /* Era 36px: el único objetivo táctil de la app por debajo de 44px, y abre
+     la hoja de sincronización, que es donde el auditor va cuando algo falla. */
+  min-height: var(--tap);
+}
+.chip-sync .punto { width: 9px; height: 9px; border-radius: 50%; background: #7ee2a8; }
+.chip-sync.pendiente .punto { background: #ffd166; }
+.chip-sync.offline .punto { background: #ff8a80; }
+.chip-sync.sincronizando .punto { animation: latido 1s infinite; }
+@keyframes latido { 50% { opacity: .3; } }
+
+/* ---------------------------------------------------------- novedades -- */
+/* Reemplaza a las notificaciones push, imposibles en esta instalación: la app
+   se sirve por http en la red local y el navegador no habilita service workers
+   fuera de un contexto seguro. Se oculta cuando no hay nada que avisar: un
+   indicador siempre encendido deja de significar algo. */
+.btn-novedades {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  min-height: var(--tap); padding: 6px 12px; border: 0; border-radius: 999px;
+  background: rgba(255,255,255,.15); color: #fff; font: inherit; font-size: 13px;
+  cursor: pointer;
+}
+.btn-novedades .campana {
+  width: 20px; height: 20px; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; background: rgba(255,255,255,.3);
+}
+.btn-novedades .cuenta { font-weight: 700; }
+/* Con al menos una novedad crítica el indicador se vuelve sólido: el color
+   solo no alcanza, así que también cambia el peso del fondo. */
+.btn-novedades.critico { background: var(--rojo); }
+.btn-novedades.critico .campana { background: rgba(255,255,255,.35); }
+
+/* ------------------------------------------------------------- tarjetas -- */
+.tarjeta {
+  background: var(--blanco); border: 1px solid var(--borde);
+  border-radius: var(--radio); padding: 16px; box-shadow: var(--sombra);
+  margin-bottom: 16px;
+}
+.tarjeta h2 { margin: 0 0 12px; font-size: 16px; }
+
+.grilla { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+
+/* Tarjeta de sector con semáforo. El color y el ícono comunican en paralelo:
+   nunca solo color (accesibilidad y uso a plena luz en plataforma). */
+/* La tarjeta es un contenedor con dos zonas táctiles: abrir el sector y el
+   atajo de confirmación. No puede ser un <button> porque anidar botones es
+   HTML inválido y rompe el foco de teclado. */
+.sector {
+  position: relative; text-align: left; cursor: pointer;
+  background: var(--blanco); border: 2px solid var(--borde);
+  border-radius: var(--radio); padding: 16px; min-height: 108px;
+  display: flex; flex-direction: column; gap: 6px; font: inherit; color: inherit;
+}
+.sector:active { transform: scale(.985); }
+/* El nombre del sector y su marca de estado son lo que el auditor necesita
+   leer de un vistazo; antes el botón de acción (ver abajo) los dominaba en
+   tamaño y color. Se sube el nombre a 17px/700 y la marca a 36px para que
+   ganen la tarjeta. */
+.sector .nombre { font-weight: 700; font-size: 17px; padding-right: 40px; }
+.sector .detalle { font-size: 13px; color: var(--gris); margin-top: auto; }
+
+/* Zona principal de la tarjeta: abre el detalle del sector. */
+.sector-abrir {
+  display: flex; flex-direction: column; gap: 6px; flex: 1;
+  background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; color: inherit; text-align: left; cursor: pointer; width: 100%;
+}
+.sector-abrir:active { opacity: .7; }
+
+/* Atajo "TODO OK": confirma el sector sin entrar.
+   Antes era un botón macizo verde, más grande y más contrastado que el
+   nombre del sector: la tarjeta invitaba a confirmar en masa antes que a leer
+   el estado. Ahora es un botón secundario (contorno, sin relleno) — sigue
+   siendo un objetivo táctil de 44px, pero ya no compite visualmente con la
+   identidad del sector. */
+.btn-sector-ok {
+  margin-top: 10px; width: 100%; min-height: 44px;
+  border-radius: 10px; border: 2px solid var(--verde);
+  background: var(--blanco); color: var(--verde);
+  font: inherit; font-weight: 700; font-size: 14px; cursor: pointer;
+  letter-spacing: .3px;
+}
+.btn-sector-ok:active { background: var(--verde-fondo); transform: scale(.97); }
+.btn-sector-ok.con-desvios {
+  color: var(--amarillo); border-color: var(--amarillo);
+}
+/* La marca del turno lleva texto (AM/PM), no un ícono de una letra. */
+.marca-turno { font-size: 13px !important; letter-spacing: .5px; }
+
+.sector .marca {
+  position: absolute; top: 12px; right: 12px;
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 700; color: #fff;
+}
+.sector.pendiente { border-color: var(--borde); background: var(--gris-fondo); }
+.sector.pendiente .marca { background: var(--gris); }
+/* Control en curso: no es un hallazgo, es trabajo empezado. Antes usaba el
+   ámbar de "con desvíos" y la pantalla de entrada parecía llena de problemas. */
+.sector.en-curso { border-color: var(--azul-claro); background: #eef5fb; }
+.sector.en-curso .marca { background: var(--azul-claro); }
+
+/* Ítem LoS excluido de los cálculos (ej.: pasarelas, que IRJ no posee).
+   Se atenúa para que no compita con los que sí se relevan. */
+.sector.no-aplica { border-color: var(--borde); background: var(--gris-fondo);
+                    opacity: .6; }
+.sector.no-aplica .marca { background: var(--borde); color: var(--gris); }
+.sector.sin-novedades { border-color: var(--verde); background: var(--verde-fondo); }
+.sector.sin-novedades .marca { background: var(--verde); }
+.sector.con-desvios { border-color: var(--amarillo); background: var(--amarillo-fondo); }
+.sector.con-desvios .marca { background: var(--amarillo); }
+
+/* -------------------------------------------------------------- botones -- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: var(--tap); padding: 12px 20px; border-radius: 10px;
+  border: 1px solid var(--borde); background: var(--blanco); color: var(--texto);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.btn:active { transform: scale(.98); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primario { background: var(--azul); border-color: var(--azul); color: #fff; }
+.btn-verde { background: var(--verde); border-color: var(--verde); color: #fff; }
+.btn-rojo { background: var(--rojo); border-color: var(--rojo); color: #fff; }
+.btn-bloque { width: 100%; }
+.btn-grande { min-height: 60px; font-size: 17px; }
+
+/* ---------------------------------------------------------------- ítems -- */
+.lista-items { display: flex; flex-direction: column; gap: 8px; }
+.item {
+  display: flex; align-items: center; gap: 12px; text-align: left;
+  min-height: 56px; padding: 12px 16px; border-radius: 10px;
+  border: 1px solid var(--borde); background: var(--blanco);
+  font: inherit; color: inherit; cursor: pointer; width: 100%;
+}
+.item .texto { flex: 1; }
+.item .nombre-item { font-weight: 500; }
+.item .obs { font-size: 13px; color: var(--gris); margin-top: 2px; }
+/* Sobre los fondos de color, el gris de apoyo se queda en 4,42:1 y no llega a
+   AA. Se oscurece solo en ese contexto, sin tocar la variable global. */
+.item.total .obs, .item.parcial .obs { color: #5f6675; }
+.item .estado-item {
+  /* Antes 12px: era el texto más chico de la app comunicando el dato más
+     importante de la fila (el estado del ítem). Sube a 13px. */
+  font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+  background: var(--verde-fondo); color: var(--verde); white-space: nowrap;
+}
+.item.parcial { border-color: var(--amarillo); background: var(--amarillo-fondo); }
+.item.parcial .estado-item { background: var(--amarillo); color: #fff; }
+.item.total { border-color: var(--rojo); background: var(--rojo-fondo); }
+.item.total .estado-item { background: var(--rojo); color: #fff; }
+.item.no-verificable { border-color: var(--gris); background: var(--gris-fondo); }
+.item.no-verificable .estado-item { background: var(--gris); color: #fff; }
+
+/* ---------------------------------------------------------------- modal -- */
+.modal {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(16, 24, 40, .55);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.modal.oculto { display: none; }
+.hoja {
+  background: var(--blanco); width: 100%; max-width: min(720px, 100%);
+  border-radius: 18px 18px 0 0; padding: 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  max-height: 92vh; overflow-y: auto;
+  animation: subir .18s ease-out;
+}
+@keyframes subir { from { transform: translateY(24px); opacity: .6; } }
+.hoja h3 { margin: 0 0 4px; font-size: 18px; }
+.hoja .sub { color: var(--gris); font-size: 14px; margin: 0 0 16px; }
+
+/* La hoja solo se centra si la pantalla es más ancha que alta (escritorio,
+   apaisado). Antes el corte era `min-width: 720px` y la tablet vertical —800px
+   de ancho— entraba en él: las hojas se centraban en un viewport de 1280px de
+   alto y los botones de acción quedaban flotando a media pantalla, en la zona
+   menos alcanzable con el pulgar. En vertical se ancla abajo (bottom sheet). */
+@media (min-aspect-ratio: 1/1) {
+  .modal { align-items: center; }
+  .hoja { border-radius: 18px; }
+}
+
+/* ------------------------------------------------------------ formulario -- */
+.campo { margin-bottom: 16px; }
+.campo label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.campo .ayuda { font-weight: 400; color: var(--gris); font-size: 13px; }
+input[type=text], input[type=password], input[type=number], textarea, select {
+  width: 100%; min-height: var(--tap); padding: 12px 14px;
+  border: 1px solid var(--borde-campo); border-radius: 10px;
+  font: inherit; background: var(--blanco); color: var(--texto);
+}
+/* 16px evita que iOS/Android hagan zoom al enfocar un input. */
+input, textarea, select { font-size: 16px; }
+textarea { min-height: 96px; resize: vertical; }
+input:focus, textarea:focus, select:focus {
+  outline: var(--foco); outline-offset: var(--foco-offset);
+  border-color: var(--azul-claro);
+}
+
+.opciones { display: flex; flex-direction: column; gap: 10px; }
+.opcion {
+  display: flex; align-items: center; gap: 12px; min-height: 56px;
+  padding: 12px 16px; border: 2px solid var(--borde); border-radius: 10px;
+  cursor: pointer; background: var(--blanco); font: inherit; text-align: left; width: 100%;
+}
+.opcion .icono { font-size: 20px; }
+.opcion small { display: block; color: var(--gris); font-size: 13px; font-weight: 400; }
+.opcion strong { font-size: 15px; }
+.opcion.sel-parcial { border-color: var(--amarillo); background: var(--amarillo-fondo); }
+.opcion.sel-total { border-color: var(--rojo); background: var(--rojo-fondo); }
+.opcion.sel-nv { border-color: var(--gris); background: var(--gris-fondo); }
+
+.acciones { display: flex; gap: 12px; margin-top: 20px; }
+.acciones .btn { flex: 1; }
+
+/* Las acciones de una hoja quedan fijas al fondo del sheet. En vertical el
+   teclado se lleva ~45% de la pantalla: al enfocar el textarea el navegador lo
+   scrollea a la vista y Guardar quedaba fuera del área visible. */
+.hoja .acciones {
+  position: sticky; bottom: 0;
+  background: var(--blanco);
+  padding-top: 12px;
+  margin-bottom: -4px;
+  box-shadow: 0 -8px 12px -8px rgba(16, 24, 40, .12);
+}
+
+/* ---------------------------------------------------------------- fotos -- */
+.fotos { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.foto-prev { position: relative; width: 88px; height: 88px; }
+.foto-prev img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px;
+                 border: 1px solid var(--borde); }
+.foto-prev button {
+  position: absolute; top: -8px; right: -8px; width: 28px; height: 28px;
+  border-radius: 50%; border: 0; background: var(--rojo); color: #fff;
+  font-size: 16px; line-height: 1; cursor: pointer;
+}
+/* Antes era solo un emoji sin texto: para una acción que la app puede exigir
+   como obligatoria, un ícono huérfano no comunica qué hace ni que hace falta
+   tocarlo. Se agrega la etiqueta "Tomar foto" debajo. */
+.btn-foto {
+  width: 88px; height: 88px; border: 2px dashed var(--borde); border-radius: 10px;
+  background: var(--gris-fondo); cursor: pointer; color: var(--gris);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; padding: 4px;
+}
+.btn-foto .icono { font-size: 22px; line-height: 1; }
+.btn-foto .txt { font-size: 11px; font-weight: 600; line-height: 1.1; text-align: center; }
+
+/* ----------------------------------------------------------- calendario -- */
+/* Un mes entero de un vistazo. Cada día es tocable para abrir su detalle.
+   auto-fill con minmax garantiza celdas de al menos 44px (mínimo táctil
+   recomendado): antes eran fijas a 16 columnas y medían ~38px en una tablet
+   real, por debajo del mínimo y con 31 celdas pegadas entre sí.
+
+   La usan los calendarios de Limpieza y de Niveles de Servicio. Compartir cómo
+   se dibuja no los acopla: la semántica (qué es verde, qué leyenda va) la
+   aporta cada módulo. */
+.calendario {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px; margin-top: 12px;
+}
+.dia {
+  position: relative; aspect-ratio: 1; min-height: 44px; border-radius: 8px;
+  border: 1px solid var(--borde); background: var(--blanco);
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; color: inherit;
+}
+/* Modo compacto: LoS lo usa para no comerse el presupuesto vertical de su
+   dashboard. Es densidad, no tamaño de celda: el mínimo táctil no se toca. */
+.calendario.compacto { gap: 4px; }
+.dia:active { transform: scale(.94); }
+/* Celda de solo lectura: no es tocable, así que tampoco finge serlo. Un botón
+   deshabilitado invita al toque y no responde. */
+span.dia { cursor: default; }
+span.dia:active { transform: none; }
+/* El estado no depende solo del color: cada uno suma un símbolo (mismo
+   lenguaje que .sector .marca) para quien no distingue los tonos o usa la
+   tablet a plena luz en plataforma.
+   El selector lleva `.dia` adelante a propósito: las pastillas de la leyenda
+   comparten las clases de estado y ponen su glifo con ::before. Sin acotar,
+   `.dia-ok::after` también las alcanzaba y el glifo salía duplicado. */
+.dia::after {
+  content: ''; position: absolute; bottom: 2px; right: 3px;
+  font-size: 9px; font-weight: 700; line-height: 1;
+}
+/* Señal secundaria, independiente del estado: el día se relevó completo pero
+   algo no cumple. Va aparte del color de fondo, que codifica cobertura —no
+   cumplimiento— en los dos calendarios. */
+.dia-punto {
+  position: absolute; top: 4px; left: 4px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--rojo); border: 1px solid var(--blanco);
+}
+.dia-ok      { background: var(--verde-fondo); border-color: var(--verde);
+               color: var(--verde); }
+.dia.dia-ok::after { content: '✓'; }
+/* Cinco estados, cinco colores. "1 turno" y "sin cerrar" compartían el ámbar
+   y solo los separaba un glifo de 9px, con lo cual el calendario no se podía
+   leer de un vistazo — que es lo único que tiene que hacer.
+   El ámbar queda para el único estado que es una deficiencia del plan (falta
+   una de las dos recorridas exigidas); "sin cerrar" es trabajo en curso y usa
+   el azul, igual que las tarjetas de turno en la pantalla de inicio. */
+.dia-parcial { background: var(--amarillo-fondo); border-color: var(--amarillo);
+               color: var(--amarillo); }
+.dia.dia-parcial::after { content: '½'; }
+.dia-abierto { background: #eef5fb; border-color: var(--azul-claro);
+               color: var(--azul-claro); }
+.dia.dia-abierto::after { content: '…'; }
+.dia-falta   { background: var(--rojo-fondo); border-color: var(--rojo);
+               color: var(--rojo); }
+.dia.dia-falta::after { content: '!'; }
+.dia-futuro  { background: var(--gris-fondo); color: var(--gris); }
+
+.leyenda {
+  display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px;
+  font-size: 13px; color: var(--gris);
+}
+.leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+.leyenda i {
+  width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--borde);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 700; font-style: normal; line-height: 1;
+}
+.leyenda i.dia-ok      { background: var(--verde-fondo); border-color: var(--verde);
+                         color: var(--verde); }
+.leyenda i.dia-ok::before { content: '✓'; }
+.leyenda i.dia-parcial { background: var(--amarillo-fondo); border-color: var(--amarillo);
+                         color: var(--amarillo); }
+.leyenda i.dia-parcial::before { content: '½'; }
+.leyenda i.dia-abierto { background: #eef5fb; border-color: var(--azul-claro);
+                         color: var(--azul-claro); }
+.leyenda i.dia-abierto::before { content: '…'; }
+.leyenda i.dia-falta   { background: var(--rojo-fondo); border-color: var(--rojo);
+                         color: var(--rojo); }
+.leyenda i.dia-falta::before { content: '!'; }
+.leyenda i.dia-futuro  { background: var(--gris-fondo); }
+
+/* ------------------------------------------- pendientes de auditorías --- */
+/* Aviso de una línea: con 19 no conformidades abiertas, la lista desplegada
+   medía tres pantallas y media y dejaba el check-list fuera de la vista. El
+   detalle vive en una hoja modal. */
+.aviso-pendientes {
+  border-left: 4px solid var(--amarillo);
+  padding: 14px 16px;
+}
+.linea-aviso {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.linea-aviso strong { display: block; font-size: 15px; }
+.detalle-aviso {
+  display: block; margin-top: 2px; font-size: 13.5px; color: var(--gris);
+}
+.linea-aviso .btn { flex: none; min-height: var(--tap); padding: 0 20px; }
+
+.lista-pendientes { max-height: 50vh; overflow-y: auto; margin-bottom: 8px; }
+.item-pendiente {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 4px; border-bottom: 1px solid var(--borde);
+}
+.item-pendiente:last-child { border-bottom: 0; }
+/* No conformidad que lleva demasiados días sin resolver. Se distingue por
+   antigüedad y no por la prioridad del pliego: casi todo desvío total entra
+   como INMEDIATA, con lo cual esa etiqueta no ordena nada. */
+.item-pendiente.demorada { border-left: 3px solid var(--amarillo); padding-left: 10px; }
+.item-pendiente.demorada .nombre-item { color: var(--amarillo); }
+/* Cada dato en su renglón: sector, descripción y antigüedad son tres cosas
+   distintas y en una sola línea corrida no se leen. */
+.item-pendiente .texto { flex: 1; min-width: 0; }
+.item-pendiente .nombre-item { display: block; font-weight: 500; }
+.item-pendiente .obs {
+  display: block; font-size: 13px; color: var(--gris); margin-top: 2px;
+}
+
+/* Acción secundaria dentro de una lista: no puede competir con "TODO OK",
+   que es la acción principal de la pantalla. */
+.btn-texto {
+  flex: none; min-height: var(--tap); padding: 0 14px;
+  background: none; border: 0; border-radius: var(--radio);
+  color: var(--azul-claro); font: inherit; font-weight: 600; cursor: pointer;
+}
+.btn-texto:active { background: var(--gris-fondo); }
+
+/* ------------------------------------------------ ítems LoS diarios ----- */
+/* Misma estructura que la tarjeta de sector en limpieza: la fila abre el
+   detalle y el botón lateral resuelve el caso frecuente en un toque. */
+.fila-dia {
+  display: flex; align-items: stretch; gap: 8px;
+  border: 1px solid var(--borde); border-radius: 10px;
+  background: var(--blanco); overflow: hidden;
+}
+.fila-dia.parcial { border-color: var(--amarillo); background: var(--amarillo-fondo); }
+.fila-dia.total   { border-color: var(--rojo); background: var(--rojo-fondo); }
+.fila-dia-abrir {
+  flex: 1; display: flex; align-items: center; gap: 12px; text-align: left;
+  min-height: 56px; padding: 12px 16px; border: 0; background: none;
+  font: inherit; color: inherit; cursor: pointer; min-width: 0;
+}
+.fila-dia-abrir .texto { flex: 1; min-width: 0; }
+.fila-dia-abrir .nombre-item { display: block; font-weight: 500; }
+.fila-dia-abrir .obs { display: block; font-size: 13px; color: var(--gris); }
+.fila-dia-abrir .estado-item { font-size: 13px; color: var(--azul-claro); }
+/* El botón de sector es de ancho completo dentro de su tarjeta; acá va al
+   costado de la fila, así que se lo achica a su contenido. */
+.fila-dia .btn-sector-ok {
+  margin: 8px 8px 8px 0; width: auto; flex: none; padding: 0 16px;
+}
+
+/* --------------------------------------------------------- configuración -- */
+.pestanas {
+  display: flex; gap: 6px; margin-bottom: 16px; overflow-x: auto;
+  padding-bottom: 4px; -webkit-overflow-scrolling: touch;
+}
+.pestana {
+  flex: 1; min-width: 108px; min-height: var(--tap);
+  border: 1px solid var(--borde); background: var(--blanco); color: var(--gris);
+  border-radius: 10px; font: inherit; font-weight: 600; cursor: pointer;
+  white-space: nowrap; padding: 0 16px;
+}
+.pestana.activa { background: var(--azul); border-color: var(--azul); color: #fff; }
+
+/* Botón chico dentro de una fila de lista (editar/borrar/estado). */
+.btn-mini {
+  min-height: 40px; padding: 8px 14px; border-radius: 8px;
+  border: 1px solid var(--borde); background: var(--blanco); color: var(--texto);
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  white-space: nowrap; margin-left: 8px;
+}
+.btn-mini:active { transform: scale(.97); }
+.btn-mini.peligro { color: var(--rojo); border-color: var(--rojo); }
+
+/* Campo con la etiqueta a la izquierda y el control a la derecha. */
+.campo-linea {
+  display: flex; align-items: center; gap: 12px; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid var(--borde); flex-wrap: wrap;
+}
+.campo-linea:last-of-type { border-bottom: 0; }
+.campo-linea label { font-weight: 500; font-size: 15px; flex: 1; min-width: 150px; }
+.campo-linea input, .campo-linea select { max-width: 180px; }
+
+.con-sufijo { display: flex; align-items: center; gap: 8px; }
+.con-sufijo input { max-width: 120px; }
+.con-sufijo span { color: var(--gris); font-weight: 600; }
+
+input.invalido { border-color: var(--rojo); background: var(--rojo-fondo); }
+
+.suma { margin: 12px 0; font-weight: 600; font-size: 14px; }
+.suma.ok { color: var(--verde); }
+.suma.error { color: var(--rojo); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-falta {
+  background: var(--amarillo-fondo); color: var(--amarillo);
+  border: 1px solid var(--amarillo); border-radius: 999px;
+  padding: 6px 12px; font-size: 13px; font-weight: 600;
+}
+
+/* Fila de equipo en el formulario de baños: nombre arriba, entradas rotuladas
+   debajo. Cada campo lleva su etiqueta visible porque en tablet no hay hover
+   que revele un title. */
+.equipo-fila {
+  padding: 12px 0; border-bottom: 1px solid var(--borde);
+}
+.equipo-fila:last-child { border-bottom: 0; }
+.equipo-encabezado { margin-bottom: 8px; }
+.equipo-encabezado strong { font-size: 15px; display: block; }
+.equipo-entradas { display: flex; gap: 12px; flex-wrap: wrap; }
+.entrada-rotulada { display: flex; flex-direction: column; gap: 4px; flex: 1;
+                    min-width: 120px; }
+.entrada-rotulada span { font-size: 12px; color: var(--gris); font-weight: 600; }
+.entrada-rotulada input { min-height: 44px; }
+
+.grilla-equipos {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+.equipo-campo label {
+  display: block; font-size: 13px; color: var(--gris); margin-bottom: 4px;
+  text-transform: capitalize; font-weight: 500;
+}
+.equipo-campo input { min-height: 44px; }
+
+/* ------------------------------------------------------------- informes -- */
+/* Resumen de lo que va a contener el informe, antes de descargarlo. */
+.resumen-informe {
+  display: grid; gap: 10px; margin: 14px 0;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+.resumen-informe div {
+  background: var(--gris-fondo); border-radius: 10px; padding: 10px 12px;
+}
+.resumen-informe span {
+  display: block; font-size: 12px; color: var(--gris); margin-bottom: 2px;
+}
+.resumen-informe strong { font-size: 18px; font-weight: 700; }
+
+/* ------------------------------------------------------------ evidencia -- */
+/* Va pegada al ítem que la exige: sangrada y con una barra ámbar a la
+   izquierda, para que se lea como "esto pertenece al ítem de arriba" y no
+   como una sección nueva. */
+.evidencia {
+  margin: 6px 0 14px 14px;
+  padding: 12px 14px;
+  background: var(--amarillo-fondo);
+  border-left: 3px solid var(--amarillo);
+  border-radius: 0 8px 8px 0;
+}
+.evidencia-titulo {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--amarillo);
+}
+.evidencia-titulo .ayuda {
+  display: block;
+  font-weight: 400;
+  color: var(--gris);
+  font-size: 12.5px;
+  margin-top: 1px;
+}
+.evidencia .fotos { margin-top: 0; }
+.evidencia .btn-foto { width: 72px; height: 72px; font-size: 22px; }
+.evidencia .foto-prev { width: 72px; height: 72px; }
+.evidencia .campo-linea { border-bottom: 0; padding: 6px 0 0; }
+
+/* --------------------------------------------------------------- avisos -- */
+.aviso {
+  border-radius: 10px; padding: 12px 14px; font-size: 14px; margin-bottom: 12px;
+  border-left: 4px solid;
+}
+.aviso.info { background: #eef4fb; border-color: var(--azul-claro); }
+.aviso.advertencia { background: var(--amarillo-fondo); border-color: var(--amarillo); }
+.aviso.error { background: var(--rojo-fondo); border-color: var(--rojo); }
+.aviso strong { display: block; margin-bottom: 2px; }
+
+/* Avisos secundarios (ej.: certificación) plegados detrás de un resumen, para
+   que no compitan en peso visual con el más relevante. */
+.detalle-avisos { margin-bottom: 12px; }
+.detalle-avisos summary {
+  cursor: pointer; color: var(--azul-claro); font-size: 14px; font-weight: 600;
+  padding: 6px 0; list-style: none;
+}
+.detalle-avisos summary::-webkit-details-marker { display: none; }
+.detalle-avisos summary::before { content: '▸ '; }
+.detalle-avisos[open] summary::before { content: '▾ '; }
+.detalle-avisos .aviso:last-child { margin-bottom: 0; }
+
+.vacio { text-align: center; color: var(--gris); padding: 48px 16px; }
+.vacio .icono { font-size: 44px; display: block; margin-bottom: 12px; opacity: .5; }
+
+/* -------------------------------------------------------------- toasts -- */
+.toasts {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center;
+  pointer-events: none; width: min(92vw, 520px);
+}
+.toast {
+  background: #1a1f26; color: #fff; padding: 14px 20px; border-radius: 10px;
+  font-size: 15px; box-shadow: var(--sombra); animation: subir .2s;
+  width: 100%; text-align: center;
+}
+.toast.ok { background: var(--verde); }
+.toast.error { background: var(--rojo); }
+.toast.con-accion {
+  display: flex; align-items: center; gap: 14px; text-align: left;
+  pointer-events: auto;                 /* el contenedor los ignora */
+}
+.toast.con-accion .txt { flex: 1; }
+.toast.con-accion .deshacer {
+  background: rgba(255,255,255,.22); color: #fff; border: 0;
+  border-radius: 8px; padding: 10px 16px; min-height: 40px;
+  font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.toast.con-accion .deshacer:active { background: rgba(255,255,255,.4); }
+
+/* ------------------------------------------------------ barra inferior -- */
+.barra-inferior {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  background: var(--blanco); border-top: 1px solid var(--borde);
+  padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom));
+  display: flex; gap: 12px; align-items: center;
+}
+.barra-inferior .resumen { flex: 1; font-size: 14px; }
+.barra-inferior .resumen strong { display: block; font-size: 19px; }
+/* Volver al alcance del pulgar. En vertical la flecha de la barra superior
+   queda a ~1.200px de la mano que sostiene la tablet. */
+.barra-inferior .btn-volver-inf {
+  min-height: var(--tap); min-width: var(--tap);
+  flex: none; border-radius: 10px;
+  border: 1px solid var(--borde); background: var(--blanco);
+  font: inherit; font-size: 20px; color: inherit; cursor: pointer;
+}
+.barra-inferior .btn-volver-inf:active { background: var(--gris-fondo); }
+/* Con solo el botón de volver, la barra no debe ocupar todo el ancho visual
+   ni dejar el botón centrado: queda anclado a la izquierda. */
+.barra-inferior .btn-volver-inf:only-child { margin-right: auto; }
+
+/* --------------------------------------------------------------- login -- */
+.login { max-width: 420px; margin: 0 auto; padding: 48px 20px; }
+.login .marca { text-align: center; margin-bottom: 28px; }
+.login .marca .splash-logo { margin: 0 auto 14px; }
+.login h1 { font-size: 21px; margin: 0 0 4px; }
+.login p.sub { color: var(--gris); margin: 0; font-size: 14px; }
+
+.barra-progreso { height: 8px; background: var(--gris-fondo); border-radius: 999px;
+                  overflow: hidden; margin-top: 8px; }
+.barra-progreso div { height: 100%; background: var(--verde); border-radius: 999px;
+                      transition: width .3s; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

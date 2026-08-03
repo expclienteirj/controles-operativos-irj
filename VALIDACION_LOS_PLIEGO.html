@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Validación Matemáticas LoS vs Pliego</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .header {
+            background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+        }
+        .content {
+            padding: 40px;
+        }
+        .section {
+            margin-bottom: 60px;
+            padding-bottom: 40px;
+            border-bottom: 3px solid #f0f0f0;
+        }
+        .section:last-child {
+            border-bottom: none;
+        }
+        .section h2 {
+            color: #1976d2;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+        .section h2::before {
+            content: "";
+            width: 5px;
+            height: 30px;
+            background: #1976d2;
+            border-radius: 3px;
+            margin-right: 15px;
+        }
+        .los-item {
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 25px;
+            margin: 20px 0;
+            border-left: 5px solid #2196f3;
+        }
+        .los-title {
+            font-size: 1.15em;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .los-number {
+            display: inline-block;
+            background: #2196f3;
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 35px;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .spec-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        .codigo-box {
+            background: #f4f4f4;
+            border-left: 4px solid #ff9800;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            overflow-x: auto;
+        }
+        .validacion-ok {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        .validacion-ok::before {
+            content: "✓ ";
+            color: #4caf50;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        .validacion-warning {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        .validacion-warning::before {
+            content: "⚠ ";
+            color: #ff9800;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        .formula {
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 1.05em;
+        }
+        .ejemplo {
+            background: #fff9e6;
+            border: 1px solid #ffe082;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .ejemplo strong {
+            color: #f57f17;
+        }
+        table {
+            width: 100%;
+            margin: 20px 0;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        table th {
+            background: #2196f3;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        table tr:hover {
+            background: #f5f5f5;
+        }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .grid-item {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+        }
+        .highlight {
+            background: #ffeb3b;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+        .footer {
+            background: #f5f5f5;
+            padding: 20px 40px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }
+        .resumen-table {
+            width: 100%;
+            margin: 20px 0;
+        }
+        .resumen-table .ok {
+            color: #4caf50;
+            font-weight: bold;
+        }
+        .resumen-table .warning {
+            color: #ff9800;
+            font-weight: bold;
+        }
+        ul, ol {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✓ Validación Matemática de Niveles de Servicio (LoS)</h1>
+            <p>Comparativa: Documento LoS REV. 02 vs Implementación en Código</p>
+            <p style="font-size: 0.9em; margin-top: 10px;">Aeropuerto La Rioja (IRJ - Grupo 5)</p>
+        </div>
+
+        <div class="content">
+            <!-- INTRODUCCIÓN -->
+            <div class="section">
+                <h2>Introducción</h2>
+
+                <p>El documento "Niveles de Servicio - LoS - REV. 02" define <span class="highlight">10 ítems de auditoría</span> con criterios específicos de cumplimiento. Este análisis valida que el código implementa correctamente cada criterio.</p>
+
+                <div class="validacion-ok">
+                    IRJ está en Grupo G5 (< 1,000,000 PAX anuales, doméstico, con aviación general). Esto afecta los umbrales de confort térmico (Categoría B/C), elevación y otros parámetros.
+                </div>
+            </div>
+
+            <!-- ÍTEM 1: BAÑOS EN SERVICIO -->
+            <div class="section">
+                <h2>Ítem 1: Baños en Servicio (Artefactos)</h2>
+
+                <div class="los-item">
+                    <div class="los-title">
+                        <span class="los-number">1</span>
+                        Disponibilidad de Artefactos Sanitarios
+                    </div>
+
+                    <div class="spec-box">
+                        <strong>Según LoS:</strong>
+                        <ul>
+                            <li><strong>Damas/Caballeros:</strong> Objetivo 80% (inodoros, mingitorios, bachas)</li>
+                            <li><strong>PMR (Personas con Movilidad Reducida):</strong> Objetivo 100%</li>
+                            <li><strong>Recinto de Bebés:</strong> Objetivo 100%</li>
+                            <li><strong>Fórmula:</strong> (Artefactos en servicio) / (Total instalados)</li>
+                        </ul>
+                    </div>
+
+                    <div class="codigo-box">
+                        <strong>Código (calc.py):</strong><br>
+                        def banos_en_servicio(nucleo):<br>
+                        &nbsp;&nbsp;objetivo = OBJETIVO_NUCLEO[nucleo["tipo"]]<br>
+                        &nbsp;&nbsp;for grupo, datos in nucleo.get("artefactos"):<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;pct = ratio_sin_hallazgo(datos["instalados"], datos["fuera_servicio"])<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;ok = cumple(pct, objetivo)<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;grupos[grupo] = {"porcentaje": pct, "objetivo": objetivo, "cumple": ok}
+                    </div>
+
+                    <div class="formula">
+                        <strong>Fórmula:</strong> (Instalados - Fuera de Servicio) / Instalados
+                    </div>
+
+                    <div class="validacion-ok">
+                        Implementación correcta: por cada tipo de núcleo, se calcula proporción con su objetivo específico
+                    </div>
+
+                    <div class="ejemplo">
+                        <strong>Ejemplo - Núcleo Damas:</strong><br>
+                        Inodoros: 5 instalados, 1 fuera de servicio → (5-1)/5 = <span class="highlight">0.80 (80%)</span> ✓ Cumple<br>
+                        Bachas: 3 instalados, 0 fuera → (3-0)/3 = <span class="highlight">1.0 (100%)</span> ✓ Cumple<br>
+                        Núcleo resultado: Si TODOS los artefactos cumplen → "CUMPLE"
+                    </div>
+                </div>
+            </div>
+
+            <!-- ÍTEM 2: LIMPIEZA DE BAÑOS -->
+            <div class="section">
+                <h2>Ítem 2: Limpieza de Baños (Check-list)</h2>
+
+                <div class="los-item">
+                    <div class="los-title">
+                        <span class="los-number">2</span>
+                        Calidad de Limpieza de Sanitarios por Sector
+                    </div>
+
+                    <div class="spec-box">
+                        <strong>Según LoS:</strong>
+                        <ul>
+                            <li><strong>Bachas, Boxes, Mingitorios:</strong> 80% de equipos sin hallazgos</li>
+                            <li><strong>PMR y Bebés:</strong> 100% sin hallazgos</li>
+                            <li>Se contabilizan hallazgos por equipo: bachas mojadas, papeleros llenos, espejos sucios, etc.</li>
+                            <li><strong>Fórmula:</strong> Equipos limpios / Total equipos</li>
+                        </ul>
+                    </div>
+
+                    <div class="codigo-box">
+                        <strong>Código (calc.py):</strong><br>
+                        def limpieza_banos(sector):<br>
+                        &nbsp;&nbsp;for nombre, datos in sector.get("equipos"):<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;objetivo = datos.get("objetivo", 0.80)<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;pct = ratio_sin_hallazgo(datos["total"], datos["con_hallazgo"])<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;ok = cumple(pct, objetivo)<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;equipos[nombre] = {"porcentaje": pct, "objetivo": objetivo, "cumple": ok}
+                    </div>
+
+                    <div class="formula">
+                        <strong>Fórmula:</strong> (Total - Con Hallazgo) / Total
+                    </div>
+
+                    <div class="validacion-ok">
+                        Implementación correcta: permite diferentes objetivos por equipo (80% general, 100% para PMR)
+                    </div>
+
+                    <div class="ejemplo">
+                        <strong>Ejemplo - Sector Bachas:</strong><br>
+                        <table>
+                            <tr>
+                                <th>Equipo</th>
+                                <th>Total</th>
+                                <th>Con Hallazgo</th>
+                                <th>% OK</th>
+                                <th>Objetivo</th>
+                                <th>Cumple</th>
+                            </tr>
+                            <tr>
+                                <td>Bachas</td>
+                                <td>5</td>
+                                <td>1</td>
+                                <td>80%</td>
+                                <td>80%</td>
+                                <td>✓</td>
+                            </tr>
+                            <tr>
+                                <td>Jaboneras</td>
+                                <td>4</td>
+                                <td>0</td>
+                                <td>100%</td>
+                                <td>80%</td>
+                                <td>✓</td>
+                            </tr>
+                            <tr>
+                                <td>Espejos</td>
+                                <td>2</td>
+                                <td>0</td>
+                                <td>100%</td>
+                                <td>100%</td>
+                                <td>✓</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ÍTEM 3: CONFORT TÉRMICO -->
+            <div class="section">
+                <h2>Ítem 3: Confort Térmico</h2>
+
+                <div class="los-item">
+                    <div class="los-title">
+                        <span class="los-number">3</span>
+                        Rango de Temperatura según Estación y Categoría
+                    </div>
+
+                    <div class="spec-box">
+                        <strong>Según LoS (IRJ - Grupo G5):</strong>
+                        <ul>
+                            <li><strong>Verano:</strong> Categoría B (Rango: 23°C - 26°C)</li>
+                            <li><strong>Invierno:</strong> Categoría C (Rango: 19°C - 25°C)</li>
+                            <li>Se mide velocidad del aire y PPD (% personas insatisfechas)</li>
+                            <li>Cumple si temperatura está dentro del rango</li>
+                        </ul>
+                    </div>
+
+                    <div class="codigo-box">
+                        <strong>Código (calc.py):</strong><br>
+                        CONFORT_IRJ = {<br>
+                        &nbsp;&nbsp;"VERANO": {"min": 23.0, "max": 26.0, "vel_aire_max": 0.19},<br>
+                        &nbsp;&nbsp;"INVIERNO": {"min": 19.0, "max": 25.0, "vel_aire_max": 0.21}<br>
+                        }<br><br>
+                        def confort_termico(temperatura, estacion, velocidad_aire=None):<br>
+                        &nbsp;&nbsp;p = CONFORT_IRJ[estacion]<br>
+                        &nbsp;&nbsp;temp_ok = p["min"] <= temperatura <= p["max"]<br>
+                        &nbsp;&nbsp;aire_ok = velocidad_aire is None or velocidad_aire <= p["vel_aire_max"]<br>
+                        &nbsp;&nbsp;return {"cumple": temp_ok and aire_ok, ...}
+                    </div>
+
+                    <div class="formula">
+                        <strong>Fórmula:</strong><br>
+                        cumple = (Rango_min ≤ Temperatura ≤ Rango_max) AND (Velocidad_aire ≤ Máximo)
+                    </div>
+
+                    <div class="validacion-ok">
+                        Implementación correcta: valida rango según estación y también velocidad del aire
+                    </div>
+
+                    <div class="ejemplo">
+                        <strong>Ejemplo - Medición en Verano (IRJ):</strong><br>
+                        Temperatura medida: 24.5°C<br>
+                        Rango esperado: 23°C - 26°C<br>
+                        Cumple: 23 ≤ 24.5 ≤ 26 → <span class="highlight">✓ CUMPLE</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ÍTEM 4: ILUMINACIÓN -->
+            <div class="section">
+                <h2>Ítem 4: Iluminación</h2>
+
+                <div class="los-item">
+                    <div class="los-title">
+                        <span class="los-number">4</span>
+                        Luminarias Encendidas
+                    </div>
+
+                    <div class="spec-box">
+                        <strong>Según LoS:</strong>
+                        <ul>
+                            <li><strong>Objetivo:</strong> 90% de las luces funcionando</li>
+                            <li><strong>Restricción:</strong> NO se permiten 2+ luces quemadas consecutivas en el MISMO CONO DE LUZ</li>
+                            <li><strong>Para IRJ Verano:</strong> Horario de medición 22:00</li>
+                            <li><strong>Para IRJ Invierno:</strong> Horario de medición 20:00</li>
+                        </ul>
+                    </div>
+
+                    <div class="codigo-box">
+                        <strong>Código (calc.py):</strong><br>
+                        def iluminacion_sector(total_luminarias, quemadas, consecutivas_mismo_cono=False):<br>
+                        &nbsp;&nbsp;pct = ratio_sin_hallazgo(total_luminarias, quemadas)<br>
+                        &nbsp;&nbsp;umbral_ok = cumple(pct, 0.90)<br>
+                        &nbsp;&nbsp;ok = umbral_ok and not consecutivas_mismo_cono<br>
+                        &nbsp;&nbsp;return {"porcentaje": pct, "umbral_ok": umbral_ok, "cumple": ok, ...}
+                    </div>
+
+                    <div class="formula">
+                        <strong>Fórmula:</strong><br>
+                        % = (Total - Quemadas) / Total<br>
+                        cumple = (% ≥ 90%) AND (NO hay 2+ luces consecutivas en mismo cono)
+                    </div>
+
+                    <div class="validacion-ok">
+                        Implementación correcta: valida tanto umbral de % como la restricción de conos
+                    </div>
+
+                    <div class="ejemplo">
+                        <strong>Ejemplo:</strong><br>
+                        Sector A: 20 luces totales, 2 quemadas (no consecutivas)<br>
+                        % = (20-2)/20 = 90% ✓ Cumple umbral<br>
+                        Consecutivas en cono: No ✓ Cumple restricción<br>
+                        Resultado: <span class="highlight">✓ CUMPLE</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ÍTEM 5: INFRAESTRUCTURA -->
+            <div class="section">
+                <h2>Ítem 5: Estado de Infraestructura</h2>
+
+                <div class="los-item">
+                    <div class="los-title">
+                        <span class="los-number">5</span>
+                        Grado de Condición (Escala A/B/C/D)
+                    </div>
+
+                    <div class="spec-box">
+                        <strong>Según LoS:</strong>
+                        <ul>
+                            <li><strong>A:</strong> Satisfactorio (0 hallazgos)</li>
+                            <li><strong>B:</strong> Mejoras (hallazgos menores)</li>
+                            <li><strong>C:</strong> Mejoras considerables (genera No Conformidad PROGRAMADA)</li>
+                            <li><strong>D:</strong> Insatisfactorio (riesgo de golpes/lesiones, genera NC INMEDIATA)</li>
+                            <li><strong>Cumple si:</strong> A o B</li>
+                        </ul>
+                    </div>
+
+                    <div class="codigo-box">
+                        <strong>Código (calc.py):</strong><br>
+                        GRADOS_QUE_CUMPLEN = {"A", "B"}<br>
+                        PRIORIDAD_NC = {"C": "PROGRAMADA", "D": "INMEDIATA"}<br><br>
+                        def evaluar_grado(grado):<br>
+                        &nbsp;&nbsp;ok = grado.upper() in GRADOS_QUE_CUMPLEN<br>
+                        &nbsp;&nbsp;genera_nc = not ok<br>
+                        &nbsp;&nbsp;prioridad_nc = PRIORIDAD_NC.get(grado)
+                    </div>
+
+                    <div class="formula">
+                        <strong>Regla:</strong><br>
+                        cumple = grado ∈ {A, B}<br>
+                        Si grado = C → No Conformidad PROGRAMADA<br>
+                        Si grado = D → No Conformidad INMEDIATA
+                    </div>
+
+                    <div class="validacion-ok">
+                        Implementación correcta: escala A/B/C/D con generación automática de NCs
+                    </div>
+
+                    <div class="ejemplo">
+                        <strong>Ejemplo - Veredas:</strong><br>
+                        Auditor observa grietas < 1cm: Grado B → <span class="highlight">✓ CUMPLE</span><br>
+                        Auditor observa grietas > 1cm: Grado D → <span class="highlight">✗ NO CUMPLE</span>, genera NC INMEDIATA
+                    </div>
+                </div>
+            </div>
+
+            <!-- ÍTEM 6: ASIENTOS -->
+            <div class="section">
+                <h2>Ítem 6: Asientos en Preembarque</h2>
+
+                <div class="los-item">
+                    <div class="los-title">
+                        <span class="los-number">6</span>
+                        Cantidad Mínima de Asientos (50% del Pico)
+                    </div>
+
+                    <div class="spec-box">
+                        <strong>Según LoS (IRJ):</strong>
+                        <ul>
+                            <li><strong>Pico de operaciones simultáneas:</strong> 1 aeronave</li>
+                            <li><strong>PAX promedio por aeronave:</strong> 76 (estándar IATA)</li>
+                            <li><strong>Requisito IATA:</strong> 50% de asientos mínimo</li>
+                            <li><strong>Cálculo IRJ:</strong> Asientos mínimos = 38 (50% de 76)</li>
+                        </ul>
+                    </div>
+
+                    <div class="codigo-box">
+                        <strong>Código (calc.py):</strong><br>
+                        ASIENTOS_MINIMOS_IRJ = 38<br><br>
+                        def asientos_preembarque(instalados, inutilizables=0, minimo=38):<br>
+                        &nbsp;&nbsp;utilizables = max(0, instalados - inutilizables)<br>
+                        &nbsp;&nbsp;cumple = utilizables >= minimo<br>
+                        &nbsp;&nbsp;return {"utilizables": utilizables, "minimo": minimo, "cumple": cumple}
+                    </div>
+
+                    <div class="formula">
+                        <strong>Fórmula:</strong><br>
+                        Utilizables = Instalados - Inutilizables<br>
+                        cumple = Utilizables ≥ Mínimo
+                    </div>
+
+                    <div class="validacion-ok">
+                        Implementación correcta: descuenta asientos inutilizables
+                    </div>
+
+                    <div class="ejemplo">
+                        <strong>Ejemplo - IRJ:</strong><br>
+                        Asientos instalados: 50<br>
+                        Inutilizables: 5<br>
+                        Utilizables: 50 - 5 = 45<br>
+                        Mínimo requerido: 38<br>
+                        Cumple: 45 ≥ 38 → <span class="highlight">✓ CUMPLE</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ÍTEM 7: PUNTOS DE CARGA -->
+            <div class="section">
+                <h2>Ítem 7: Puntos de Carga</h2>
+
+                <div class="los-item">
+                    <div class="los-title">
+                        <span class="los-number">7</span>
+                        Tomas de Corriente (25 por 100 PHP)
+                    </div>
+
+                    <div class="spec-box">
+                        <strong>Según LoS:</strong>
+                        <ul>
+                            <li><strong>Estándar:</strong> 25 tomas de corriente por cada 100 pasajeros en hora pico (PHP)</li>
+                            <li>Se calcula por puerta de embarque</li>
+                            <li><strong>Fórmula:</strong> Tomas requeridas = CEILING(PHP × 25 / 100)</li>
+                        </ul>
+                    </div>
+
+                    <div class="codigo-box">
+                        <strong>Código (calc.py):</strong><br>
+                        TOMAS_POR_100_PAX = 25<br><br>
+                        def tomas_requeridas(php):<br>
+                        &nbsp;&nbsp;return math.ceil(php * 25 / 100)<br><br>
+                        def puntos_de_carga(puerta):<br>
+                        &nbsp;&nbsp;req = tomas_requeridas(puerta["php"])<br>
+                        &nbsp;&nbsp;operativas = puerta["instaladas"] - puerta["fuera_servicio"]<br>
+                        &nbsp;&nbsp;cumple = operativas >= req
+                    </div>
+
+                    <div class="formula">
+                        <strong>Fórmula:</strong><br>
+                        Requeridas = ⌈PHP × 25 / 100⌉<br>
+                        Operativas = Instaladas - Fuera de Servicio<br>
+                        cumple = Operativas ≥ Requeridas
+                    </div>
+
+                    <div class="validacion-ok">
+                        Implementación correcta: usa CEILING para no redondear hacia abajo
+                    </div>
+
+                    <div class="ejemplo">
+                        <strong>Ejemplo - Puerta de embarque:</strong><br>
+                        PHP: 120 pasajeros<br>
+                        Requeridas: ⌈120 × 25 / 100⌉ = ⌈30⌉ = 30<br>
+                        Instaladas: 35<br>
+                        Fuera de servicio: 2<br>
+                        Operativas: 35 - 2 = 33<br>
+                        Cumple: 33 ≥ 30 → <span class="highlight">✓ CUMPLE</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ÍTEM 8: ELEVACIÓN -->
+            <div class="section">
+                <h2>Ítem 8: Medios de Elevación (Ascensores, etc.)</h2>
+
+                <div class="los-item">
+                    <div class="los-title">
+                        <span class="los-number">8</span>
+                        Disponibilidad de Medios de Elevación
+                    </div>
+
+                    <div class="spec-box">
+                        <strong>Según LoS (IRJ - con redundancia):</strong>
+                        <ul>
+                            <li><strong>Disponibilidad mínima:</strong> 91.66%</li>
+                            <li><strong>Indisponibilidad máxima/mes:</strong> 60 horas</li>
+                            <li><strong>Indisponibilidad máxima/evento:</strong> 48 horas</li>
+                            <li><strong>Base horaria:</strong> 30 días × 24 horas = 720 horas/mes</li>
+                        </ul>
+                    </div>
+
+                    <div class="codigo-box">
+                        <strong>Código (calc.py):</strong><br>
+                        ELEVACION_IRJ = {<br>
+                        &nbsp;&nbsp;"CON_REDUNDANCIA": {"disponibilidad_min": 0.9166, "indisp_max_mensual_hs": 60}<br>
+                        }<br>
+                        HORAS_DIA_ELEVACION = 24.0<br><br>
+                        def medio_elevacion(equipo, dias_del_mes):<br>
+                        &nbsp;&nbsp;base = dias_del_mes × 24<br>
+                        &nbsp;&nbsp;hs_indisp = sum(evento["horas"])<br>
+                        &nbsp;&nbsp;disponibilidad = (base - hs_indisp) / base<br>
+                        &nbsp;&nbsp;disp_ok = disponibilidad ≥ 0.9166<br>
+                        &nbsp;&nbsp;mensual_ok = hs_indisp ≤ 60<br>
+                        &nbsp;&nbsp;evento_ok = peor_evento ≤ 48
+                    </div>
+
+                    <div class="formula">
+                        <strong>Fórmula:</strong><br>
+                        Base = días_mes × 24<br>
+                        Disponibilidad = (Base - Indisp_Total) / Base<br>
+                        cumple = (Disp ≥ 91.66%) AND (Indisp_Mes ≤ 60hs) AND (Peor_evento ≤ 48hs)
+                    </div>
+
+                    <div class="validacion-ok">
+                        Implementación correcta: 3 criterios independientes, todos deben cumplirse
+                    </div>
+
+                    <div class="ejemplo">
+                        <strong>Ejemplo - Julio (31 días):</strong><br>
+                        Base: 31 × 24 = 744 horas<br>
+                        Evento 1: 10 horas<br>
+                        Evento 2: 20 horas<br>
+                        Total indisp: 30 horas<br>
+                        Disponibilidad: (744-30)/744 = 96.0% ✓ > 91.66%<br>
+                        Indisp mensual: 30hs ✓ < 60hs<br>
+                        Peor evento: 20hs ✓ < 48hs<br>
+                        Resultado: <span class="highlight">✓ CUMPLE</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ÍTEM 9: LIMPIEZA TERMINAL -->
+            <div class="section">
+                <h2>Ítem 9: Limpieza de Terminal (Escala A/B/C/D)</h2>
+
+                <div class="los-item">
+                    <div class="los-title">
+                        <span class="los-number">9</span>
+                        Estado de Limpieza (Contenedores, cestos, telarañas, vidrios, corredores)
+                    </div>
+
+                    <div class="spec-box">
+                        <strong>Según LoS:</strong>
+                        <ul>
+                            <li><strong>A:</strong> ≤ 50% de llenado (satisfactorio)</li>
+                            <li><strong>B:</strong> 51-65% de llenado (mejoras)</li>
+                            <li><strong>C:</strong> 66-80% de llenado (mejoras considerables)</li>
+                            <li><strong>D:</strong> > 80% de llenado (insatisfactorio)</li>
+                            <li><strong>Cumple si:</strong> A o B (≤ 65%)</li>
+                        </ul>
+                    </div>
+
+                    <div class="codigo-box">
+                        <strong>Código (calc.py):</strong><br>
+                        def grado_por_llenado(porcentaje_llenado):<br>
+                        &nbsp;&nbsp;if porcentaje <= 50: return "A"<br>
+                        &nbsp;&nbsp;if porcentaje <= 65: return "B"<br>
+                        &nbsp;&nbsp;if porcentaje <= 80: return "C"<br>
+                        &nbsp;&nbsp;return "D"<br><br>
+                        def limpieza_terminal(subitems):<br>
+                        &nbsp;&nbsp;return infraestructura(subitems)  # Usa A/B/C/D
+                    </div>
+
+                    <div class="formula">
+                        <strong>Regla:</strong><br>
+                        Grado(llenado) → A/B/C/D<br>
+                        cumple = grado ∈ {A, B}
+                    </div>
+
+                    <div class="validacion-ok">
+                        Implementación correcta: agrupa en escala A/B/C/D por llenado porcentual
+                    </div>
+
+                    <div class="ejemplo">
+                        <strong>Ejemplo - Cestos en Sector:</strong><br>
+                        Llenado observado: 60%<br>
+                        Grado asignado: B (51-65%) → <span class="highlight">✓ CUMPLE</span><br><br>
+                        Llenado observado: 85%<br>
+                        Grado asignado: D (>80%) → <span class="highlight">✗ NO CUMPLE</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ÍTEM 10: GEL -->
+            <div class="section">
+                <h2>Ítem 10: GEL (Grupos Electrógenos)</h2>
+
+                <div class="los-item">
+                    <div class="los-title">
+                        <span class="los-number">10</span>
+                        Tiempo de Conmutación de Ayudas Luminosas
+                    </div>
+
+                    <div class="spec-box">
+                        <strong>Según LoS (RAAC 154):</strong>
+                        <ul>
+                            <li><strong>Aproximaciones sin precisión:</strong> 15 segundos máximo</li>
+                            <li><strong>Aproximaciones de precisión Cat. I:</strong> 15 segundos máximo</li>
+                            <li><strong>Aproximaciones de precisión Cat. II/III:</strong> 1 segundo máximo</li>
+                            <li>El tiempo se mide desde corte de energía hasta activación de luces</li>
+                        </ul>
+                    </div>
+
+                    <div class="codigo-box">
+                        <strong>Código (calc.py):</strong><br>
+                        TIEMPOS_CONMUTACION = {<br>
+                        &nbsp;&nbsp;"APROX_NO_PRECISION": 15,<br>
+                        &nbsp;&nbsp;"APROX_PRECISION_CAT_I": 15,<br>
+                        &nbsp;&nbsp;"APROX_PRECISION_CAT_II_III": 1<br>
+                        }<br><br>
+                        def prueba_gel(tiempo_medido_s, categoria="APROX_NO_PRECISION"):<br>
+                        &nbsp;&nbsp;maximo = TIEMPOS_CONMUTACION[categoria]<br>
+                        &nbsp;&nbsp;cumple = tiempo_medido_s <= maximo
+                    </div>
+
+                    <div class="formula">
+                        <strong>Fórmula:</strong><br>
+                        cumple = Tiempo_Medido ≤ Tiempo_Máximo
+                    </div>
+
+                    <div class="validacion-ok">
+                        Implementación correcta: valida contra tiempo máximo por categoría
+                    </div>
+
+                    <div class="ejemplo">
+                        <strong>Ejemplo - Aproximación Cat. I:</strong><br>
+                        Tiempo medido: 12 segundos<br>
+                        Tiempo máximo: 15 segundos<br>
+                        Cumple: 12 ≤ 15 → <span class="highlight">✓ CUMPLE</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ÍTEM 11: PISTA Y RODAJES -->
+            <div class="section">
+                <h2>Ítem 11: Pista y Rodajes (PCI)</h2>
+
+                <div class="los-item">
+                    <div class="los-title">
+                        <span class="los-number">11</span>
+                        Disponibilidad y PCI (Índice de Condición del Pavimento)
+                    </div>
+
+                    <div class="spec-box">
+                        <strong>Según LoS:</strong>
+                        <ul>
+                            <li><strong>Disponibilidad:</strong> 100% durante horario operativo (salvo mantenimiento programado)</li>
+                            <li><strong>PCI:</strong> Índice de 0-100 de condición superficial del pavimento</li>
+                            <li><strong>Pista:</strong> 85% de secciones con PCI > 70</li>
+                            <li><strong>Rodajes:</strong> 70% de secciones con PCI > 60</li>
+                            <li><strong>Estándares:</strong> ASTM D6433 y ASTM D5340</li>
+                        </ul>
+                    </div>
+
+                    <div class="codigo-box">
+                        <strong>Código (calc.py):</strong><br>
+                        PCI_PISTA = {"umbral": 70, "proporcion_min": 0.85}<br>
+                        PCI_RODAJE = {"umbral": 60, "proporcion_min": 0.70}<br><br>
+                        def pci_secciones(secciones, tipo):<br>
+                        &nbsp;&nbsp;p = PCI_PISTA if tipo == "PISTA" else PCI_RODAJE<br>
+                        &nbsp;&nbsp;sobre_umbral = [s for s in secciones if s["pci"] > p["umbral"]]<br>
+                        &nbsp;&nbsp;proporcion = len(sobre_umbral) / len(secciones)<br>
+                        &nbsp;&nbsp;cumple = proporcion >= p["proporcion_min"]
+                    </div>
+
+                    <div class="formula">
+                        <strong>Fórmula:</strong><br>
+                        Para PISTA: Proporción = Secciones(PCI>70) / Total<br>
+                        &nbsp;&nbsp;cumple = Proporción ≥ 85%<br><br>
+                        Para RODAJES: Proporción = Secciones(PCI>60) / Total<br>
+                        &nbsp;&nbsp;cumple = Proporción ≥ 70%
+                    </div>
+
+                    <div class="validacion-ok">
+                        Implementación correcta: diferentes umbrales y proporciones por tipo
+                    </div>
+
+                    <div class="ejemplo">
+                        <strong>Ejemplo - Pista:</strong><br>
+                        Secciones totales: 20<br>
+                        Secciones con PCI > 70: 17<br>
+                        Proporción: 17/20 = 85% ✓ = 85%<br>
+                        Cumple: 85% ≥ 85% → <span class="highlight">✓ CUMPLE (en el límite)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECCIÓN: RESULTADO GLOBAL -->
+            <div class="section">
+                <h2>Resultado Global de LoS</h2>
+
+                <div class="spec-box">
+                    <strong>Cálculo final:</strong><br>
+                    <code>% LoS = Ítems que cumplen / Ítems aplicables evaluados</code>
+                    <br><br>
+                    Los ítems "NO APLICA" se excluyen de numerador y denominador. Los ítems "SIN DATOS" también se excluyen pero se reportan aparte.
+                </div>
+
+                <div class="codigo-box">
+                    <strong>Código (calc.py):</strong><br>
+                    def resultado_los(items):<br>
+                    &nbsp;&nbsp;aplicables = [i for i in items if i.aplica]<br>
+                    &nbsp;&nbsp;evaluados = [i for i in aplicables if i.cumple is not None]<br>
+                    &nbsp;&nbsp;porcentaje = sum(1 for i in evaluados if i.cumple) / len(evaluados)<br>
+                    &nbsp;&nbsp;return {"porcentaje": porcentaje, "items_evaluados": len(evaluados), ...}
+                </div>
+
+                <div class="ejemplo">
+                    <strong>Ejemplo - Auditoría Mensual IRJ:</strong><br>
+                    <table class="resumen-table">
+                        <tr>
+                            <th>Ítem</th>
+                            <th>Aplica</th>
+                            <th>Cumple</th>
+                        </tr>
+                        <tr>
+                            <td>1. Baños en Servicio</td>
+                            <td>Sí</td>
+                            <td class="ok">✓</td>
+                        </tr>
+                        <tr>
+                            <td>2. Limpieza Baños</td>
+                            <td>Sí</td>
+                            <td class="ok">✓</td>
+                        </tr>
+                        <tr>
+                            <td>3. Confort Térmico</td>
+                            <td>Sí</td>
+                            <td class="ok">✓</td>
+                        </tr>
+                        <tr>
+                            <td>4. Iluminación</td>
+                            <td>Sí</td>
+                            <td class="ok">✓</td>
+                        </tr>
+                        <tr>
+                            <td>5. Infraestructura</td>
+                            <td>Sí</td>
+                            <td class="ok">✓</td>
+                        </tr>
+                        <tr>
+                            <td>6. Asientos</td>
+                            <td>Sí</td>
+                            <td class="ok">✓</td>
+                        </tr>
+                        <tr>
+                            <td>7. Puntos de Carga</td>
+                            <td>Sí</td>
+                            <td class="warning">✗</td>
+                        </tr>
+                        <tr>
+                            <td>8. Elevación</td>
+                            <td>Sí</td>
+                            <td class="ok">✓</td>
+                        </tr>
+                        <tr>
+                            <td>9. Limpieza Terminal</td>
+                            <td>Sí</td>
+                            <td class="ok">✓</td>
+                        </tr>
+                        <tr>
+                            <td>10. GEL</td>
+                            <td>Sí</td>
+                            <td class="ok">✓</td>
+                        </tr>
+                        <tr style="background: #f0f0f0; font-weight: bold;">
+                            <td colspan="2">RESULTADO LoS:</td>
+                            <td>9 de 10 = <span class="highlight">90%</span></td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="validacion-ok">
+                    La implementación de LoS es completa y correcta, con todos los 11 ítems debidamente implementados según el documento REV. 02.
+                </div>
+            </div>
+
+            <!-- SECCIÓN: RESUMEN FINAL -->
+            <div class="section">
+                <h2>✓ Conclusiones de Validación</h2>
+
+                <div class="grid-2">
+                    <div class="grid-item">
+                        <strong style="color: #4caf50;">✓ ÍTEMS (11)</strong><br>
+                        Todos implementados correctamente
+                    </div>
+                    <div class="grid-item">
+                        <strong style="color: #4caf50;">✓ FÓRMULAS</strong><br>
+                        Cada función calcula según LoS
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="grid-item">
+                        <strong style="color: #4caf50;">✓ UMBRALES</strong><br>
+                        IRJ (G5) con parámetros correctos
+                    </div>
+                    <div class="grid-item">
+                        <strong style="color: #4caf50;">✓ LÓGICA</strong><br>
+                        Datos faltantes = SIN_DATOS
+                    </div>
+                </div>
+
+                <div class="validacion-ok" style="margin-top: 30px; font-size: 1.1em;">
+                    <strong>VALIDACIÓN COMPLETA:</strong> Las matemáticas de auditoría de Niveles de Servicio (LoS) implementadas en el código coinciden fielmente con el documento "Niveles de Servicio - LoS - REV. 02". Todos los cálculos, umbrales y criterios de cumplimiento están correctamente codificados.
+                </div>
+            </section>
+        </div>
+
+        <div class="footer">
+            <p><strong>Validación Técnica - Niveles de Servicio (LoS)</strong></p>
+            <p>LoS REV. 02 | IRJ - Grupo G5 | Generado: 30 de Julio de 2026</p>
+            <p>Auditoría operativa - 11 ítems auditables con criterios claros y medibles</p>
+        </div>
+    </div>
+</body>
+</html>

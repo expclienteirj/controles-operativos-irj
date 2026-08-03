@@ -1,0 +1,11 @@
+# Dependencias del backend. Todo lo demás es stdlib de Python.
+#
+# psycopg: driver de Postgres. Solo hace falta cuando IRJ_DB_URL apunta a
+#   Supabase; con SQLite la app arranca sin él (db.py lo importa dentro de una
+#   función y tolera que falte). El extra [binary] evita tener que compilar.
+psycopg[binary]==3.2.13
+
+# Pillow: recomprime las fotos que se embeben en los informes PDF.
+#   informes.py la importa dentro de la función, así que sin ella el informe
+#   sale igual pero sin las miniaturas de evidencia.
+Pillow==11.3.0
