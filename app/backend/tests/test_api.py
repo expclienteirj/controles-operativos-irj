@@ -17,6 +17,7 @@ os.environ["IRJ_DB"] = os.path.join(TMP, "test.db")
 
 import api  # noqa: E402
 import db   # noqa: E402
+import services  # noqa: E402
 import basedeprueba  # noqa: E402
 
 db.DB_PATH = os.environ["IRJ_DB"]
@@ -1282,3 +1283,56 @@ class TestArtefactosDesdeElControl(TestAPI):
         bid = r["baja_id"]
         self.assertEqual(self.auditor("DELETE", f"/api/artefactos/bajas/{bid}")[0], 403)
         self.assertEqual(self.admin("DELETE", f"/api/artefactos/bajas/{bid}")[0], 200)
+
+
+class TestFrenoDeLogin(TestAPI):
+    """El freno visto desde afuera, por HTTP, como lo va a ver un atacante."""
+
+    def setUp(self):
+        # Cada test arranca sin historial de fallos previos.
+        conn = db.conectar()
+        conn.execute("DELETE FROM intentos_login")
+        conn.commit()
+        conn.close()
+
+    def test_pasado_el_limite_responde_429_y_no_401(self):
+        for _ in range(services.LOGIN_MAX_INTENTOS):
+            codigo, _r = self.pedir("POST", "/api/login",
+                                    {"usuario": "admin", "password": "mala"})
+            self.assertEqual(codigo, 401)
+
+        codigo, r = self.pedir("POST", "/api/login",
+                               {"usuario": "admin", "password": "mala"})
+        self.assertEqual(codigo, 429)
+        self.assertIn("Demasiados intentos", r["error"])
+
+    def test_el_freno_no_revela_si_el_usuario_existe(self):
+        """Un usuario inexistente tiene que verse igual que uno real."""
+        for _ in range(services.LOGIN_MAX_INTENTOS):
+            self.pedir("POST", "/api/login",
+                       {"usuario": "no-existe", "password": "x"})
+        codigo, r = self.pedir("POST", "/api/login",
+                               {"usuario": "no-existe", "password": "x"})
+        self.assertEqual(codigo, 429)
+        self.assertNotIn("no-existe", r["error"])
+
+    def test_la_contrasena_correcta_sigue_entrando_antes_del_limite(self):
+        for _ in range(services.LOGIN_MAX_INTENTOS - 1):
+            self.pedir("POST", "/api/login",
+                       {"usuario": "admin", "password": "mala"})
+        codigo, r = self.pedir("POST", "/api/login",
+                               {"usuario": "admin", "password": "admin1234"})
+        self.assertEqual(codigo, 200)
+        self.assertIn("token", r)
+
+    def test_entrar_bien_limpia_el_historial(self):
+        for _ in range(services.LOGIN_MAX_INTENTOS - 1):
+            self.pedir("POST", "/api/login",
+                       {"usuario": "admin", "password": "mala"})
+        self.pedir("POST", "/api/login",
+                   {"usuario": "admin", "password": "admin1234"})
+        # Tras el acierto vuelve a haber margen completo.
+        for _ in range(services.LOGIN_MAX_INTENTOS - 1):
+            codigo, _r = self.pedir("POST", "/api/login",
+                                    {"usuario": "admin", "password": "mala"})
+            self.assertEqual(codigo, 401)

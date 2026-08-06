@@ -1,14 +1,9 @@
 -- Datos maestros de Controles Operativos IRJ (seed).
---
--- Generado ejecutando seed.py contra Postgres y volcando el resultado, así que
--- es exactamente lo que produce la aplicación, no una transcripción a mano.
---
--- Ejecutar en el SQL Editor de Supabase DESPUÉS de esquema-supabase.sql.
--- Todas las filas llevan ON CONFLICT DO NOTHING: repetirlo no duplica nada ni
--- pisa valores que el admin haya ajustado.
+-- Generado ejecutando seed.py contra Postgres y volcando el resultado.
+-- Ejecutar en el SQL Editor DESPUÉS de esquema-supabase.sql. Es idempotente.
 
 
--- config: 45 fila(s)
+-- config: 47 fila(s)
 INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('aeropuerto_categoria', '"G5"', 'general', 'Categoría del aeropuerto', '1') ON CONFLICT DO NOTHING;
 INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('aeropuerto_codigo', '"IRJ"', 'general', 'Código IATA/OACI del aeropuerto', '1') ON CONFLICT DO NOTHING;
 INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('aeropuerto_nombre', '"Aeropuerto Capitán Vicente Almandos Almonacid"', 'general', 'Nombre del aeropuerto', '1') ON CONFLICT DO NOTHING;
@@ -43,6 +38,8 @@ INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('inicio_vera
 INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('limpieza_terminal_link_checklist', '{"contenedores_basura": ["contenedores_de_basura"], "cestos_interiores": ["papeleros"], "cestos_externos": ["cestos_residuos", "residuos"], "telaranias_polvo": ["techo"], "limpieza_vidrios": ["vidriera", "vidrieria", "vidrios", "vidrieria_carpinteria_metalica"], "corredores_peatonales": ["pisos", "piso", "pisos_gral", "superficie"]}', 'los', '3.8 — Ítems del check-list diario que alimentan cada sub-ítem de limpieza de terminal.', '1') ON CONFLICT DO NOTHING;
 INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('limpieza_terminal_subitems', '{"contenedores_basura": "Nivel de llenado antes de la recolección", "cestos_interiores": "Nivel de llenado", "cestos_externos": "Nivel de llenado", "telaranias_polvo": "A sin acumulación · B mínima en bajo tránsito · C moderada en áreas visibles · D visible en alto tránsito", "limpieza_vidrios": "A sin suciedad · B leve en baja visibilidad · C visible en alto tránsito · D acumulación considerable", "corredores_peatonales": "A sin residuos · B mínimos en bajo tránsito · C moderados en áreas accesibles · D acumulación significativa"}', 'los', '3.8 — Sub-ítems de limpieza de terminal', '1') ON CONFLICT DO NOTHING;
 INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('limpieza_terminal_umbrales_llenado', '{"A": [0, 50], "B": [51, 65], "C": [66, 80], "D": [81, 100]}', 'los', '3.8 — Umbrales de llenado para contenedores y cestos', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('login_max_intentos', '10', 'general', 'Intentos fallidos de login antes de bloquear. 0 desactiva el freno', '1') ON CONFLICT DO NOTHING;
+INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('login_ventana_minutos', '15', 'general', 'Minutos que se miran hacia atrás para contar los intentos fallidos', '1') ON CONFLICT DO NOTHING;
 INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('pasarelas_aplica', 'false', 'los', '3.11 — IRJ no figura en la Tabla 10 del manual: no posee mangas', '1') ON CONFLICT DO NOTHING;
 INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('pci_escala', '[{"min": 85, "max": 100, "etiqueta": "Bueno"}, {"min": 70, "max": 85, "etiqueta": "Satisfactorio"}, {"min": 55, "max": 70, "etiqueta": "Razonable"}, {"min": 40, "max": 55, "etiqueta": "Malo"}, {"min": 25, "max": 40, "etiqueta": "Muy malo"}, {"min": 10, "max": 25, "etiqueta": "Grave"}, {"min": 0, "max": 10, "etiqueta": "Nefasto"}]', 'los', '3.10 — Escala de referencia de PCI', '1') ON CONFLICT DO NOTHING;
 INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('pci_pista', '{"umbral": 70, "proporcion_min": 0.85}', 'los', '3.10 — 85% de secciones de pista con PCI > 70', '1') ON CONFLICT DO NOTHING;
@@ -65,7 +62,7 @@ INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('6', 'banos
 INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('7', 'air_side', 'Air side', '7', '1') ON CONFLICT DO NOTHING;
 INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('8', 'estacionamiento', 'Estacionamiento', '8', '1') ON CONFLICT DO NOTHING;
 INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('9', 'oficinas_aa', 'Oficinas Aeropuertos Argentina (Operaciones)', '9', '1') ON CONFLICT DO NOTHING;
-SELECT setval(pg_get_serial_sequence('sectores_limpieza', 'id'), COALESCE((SELECT MAX(id) FROM sectores_limpieza), 1), true);
+SELECT setval(pg_get_serial_sequence('sectores_limpieza','id'), COALESCE((SELECT MAX(id) FROM sectores_limpieza),1), true);
 
 -- items_limpieza: 85 fila(s)
 INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('1', '1', 'vidriera', 'Vidriera', '1', '1') ON CONFLICT DO NOTHING;
@@ -153,7 +150,7 @@ INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('82'
 INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('83', '9', 'tachos_de_residuos', 'Tachos de residuos', '4', '1') ON CONFLICT DO NOTHING;
 INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('84', '9', 'artefactos_de_iluminacion', 'Artefactos de iluminación', '5', '1') ON CONFLICT DO NOTHING;
 INSERT INTO items_limpieza (id,sector_id,clave,nombre,orden,activo) VALUES ('85', '9', 'techo', 'Techo', '6', '1') ON CONFLICT DO NOTHING;
-SELECT setval(pg_get_serial_sequence('items_limpieza', 'id'), COALESCE((SELECT MAX(id) FROM items_limpieza), 1), true);
+SELECT setval(pg_get_serial_sequence('items_limpieza','id'), COALESCE((SELECT MAX(id) FROM items_limpieza),1), true);
 
 -- equipamiento_limpieza: 6 fila(s)
 INSERT INTO equipamiento_limpieza (id,clave,nombre,exigido,orden) VALUES ('1', 'lavadora_automatica_control_a_pie', 'Lavadora automática (control a pie)', '1', '1') ON CONFLICT DO NOTHING;
@@ -162,7 +159,7 @@ INSERT INTO equipamiento_limpieza (id,clave,nombre,exigido,orden) VALUES ('3', '
 INSERT INTO equipamiento_limpieza (id,clave,nombre,exigido,orden) VALUES ('4', 'hidrolavadora', 'Hidrolavadora', '1', '4') ON CONFLICT DO NOTHING;
 INSERT INTO equipamiento_limpieza (id,clave,nombre,exigido,orden) VALUES ('5', 'sopladora', 'Sopladora', '1', '5') ON CONFLICT DO NOTHING;
 INSERT INTO equipamiento_limpieza (id,clave,nombre,exigido,orden) VALUES ('6', 'andamio_escalera', 'Andamio / Escalera', '1', '6') ON CONFLICT DO NOTHING;
-SELECT setval(pg_get_serial_sequence('equipamiento_limpieza', 'id'), COALESCE((SELECT MAX(id) FROM equipamiento_limpieza), 1), true);
+SELECT setval(pg_get_serial_sequence('equipamiento_limpieza','id'), COALESCE((SELECT MAX(id) FROM equipamiento_limpieza),1), true);
 
 -- los_items: 11 fila(s)
 INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('1', 'banos', 'Baños', '1', '1', 'DERIVADO', 'nucleos_sanitarios') ON CONFLICT DO NOTHING;
@@ -176,4 +173,4 @@ INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_invent
 INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('9', 'gel', 'Grupos electrógenos (GEL)', '9', '1', 'MENSUAL', NULL) ON CONFLICT DO NOTHING;
 INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('10', 'pista_rodajes', 'Pista y rodajes', '10', '1', 'MENSUAL', 'secciones_pavimento') ON CONFLICT DO NOTHING;
 INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('11', 'pasarelas', 'Pasarelas telescópicas', '11', '0', 'MENSUAL', NULL) ON CONFLICT DO NOTHING;
-SELECT setval(pg_get_serial_sequence('los_items', 'id'), COALESCE((SELECT MAX(id) FROM los_items), 1), true);
+SELECT setval(pg_get_serial_sequence('los_items','id'), COALESCE((SELECT MAX(id) FROM los_items),1), true);

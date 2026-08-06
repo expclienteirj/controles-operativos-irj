@@ -1740,6 +1740,75 @@ def estacion_actual(conn: sqlite3.Connection, hoy: date | None = None) -> str:
     return "VERANO" if inicio_verano <= mmdd < inicio_invierno else "INVIERNO"
 
 
+# ==========================================================================
+# FRENO A LA PRUEBA DE CONTRASEÑAS
+# ==========================================================================
+
+# Valores por defecto; el admin los puede cambiar desde la configuración.
+# Diez intentos en un cuarto de hora no molestan a nadie que se haya olvidado
+# la contraseña, y cortan de raíz el barrido automático.
+LOGIN_MAX_INTENTOS = 10
+LOGIN_VENTANA_MINUTOS = 15
+
+
+def _limites_login(conn) -> tuple[int, int]:
+    return (db.get_config(conn, "login_max_intentos", LOGIN_MAX_INTENTOS),
+            db.get_config(conn, "login_ventana_minutos", LOGIN_VENTANA_MINUTOS))
+
+
+def login_bloqueado(conn: sqlite3.Connection, usuario: str,
+                    ip: str | None) -> int | None:
+    """Minutos que faltan para poder reintentar, o None si no está bloqueado.
+
+    Se cuentan por separado los fallos del usuario y los de la IP: lo primero
+    protege una cuenta concreta de que le prueben contraseñas, lo segundo frena
+    a quien barre muchos usuarios desde el mismo origen.
+    """
+    maximo, ventana = _limites_login(conn)
+    if maximo <= 0:
+        return None
+
+    claves = [f"usuario:{usuario}"] + ([f"ip:{ip}"] if ip else [])
+    for clave in claves:
+        fila = conn.execute(
+            "SELECT COUNT(*) c, MIN(momento) primero FROM intentos_login "
+            "WHERE clave = ? AND momento > datetime('now', ?)",
+            (clave, f"-{ventana} minutes")).fetchone()
+        if fila and fila["c"] >= maximo:
+            # Se espera a que el más viejo salga de la ventana.
+            from datetime import datetime, timedelta
+            try:
+                vence = (datetime.strptime(fila["primero"], "%Y-%m-%d %H:%M:%S")
+                         + timedelta(minutes=ventana))
+                faltan = int((vence - datetime.utcnow()).total_seconds() // 60) + 1
+            except (ValueError, TypeError):
+                faltan = ventana
+            return max(1, faltan)
+    return None
+
+
+def registrar_intento_fallido(conn: sqlite3.Connection, usuario: str,
+                              ip: str | None) -> None:
+    """Anota el fallo y limpia lo que ya salió de la ventana."""
+    _, ventana = _limites_login(conn)
+    conn.execute("INSERT INTO intentos_login (clave) VALUES (?)",
+                 (f"usuario:{usuario}",))
+    if ip:
+        conn.execute("INSERT INTO intentos_login (clave) VALUES (?)", (f"ip:{ip}",))
+    # La tabla no debe crecer sin fin: lo viejo ya no cuenta para nada.
+    conn.execute("DELETE FROM intentos_login WHERE momento < datetime('now', ?)",
+                 (f"-{max(ventana, 60)} minutes",))
+    conn.commit()
+
+
+def limpiar_intentos(conn: sqlite3.Connection, usuario: str,
+                     ip: str | None) -> None:
+    """Un login correcto borra el historial de fallos de ese usuario y esa IP."""
+    conn.execute("DELETE FROM intentos_login WHERE clave = ?", (f"usuario:{usuario}",))
+    if ip:
+        conn.execute("DELETE FROM intentos_login WHERE clave = ?", (f"ip:{ip}",))
+
+
 def registrar_log(conn: sqlite3.Connection, usuario_id: int | None, accion: str,
                   entidad: str | None = None, entidad_id: int | None = None,
                   detalle: dict | None = None) -> None:

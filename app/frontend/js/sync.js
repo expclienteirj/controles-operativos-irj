@@ -31,6 +31,37 @@ const Sync = (() => {
     return sincronizar({ silencioso: false });
   }
 
+  // Tope de tamaño por envío. El borde de Vercel rechaza con 413 cualquier
+  // petición de más de 4,5 MB, y ese límite es de infraestructura: no se puede
+  // subir por configuración. Se deja margen para las cabeceras y el JSON.
+  //
+  // Con señal permanente la cola nunca se acerca a esto —sincroniza cada 60 s—,
+  // pero si un access point se cae a mitad de recorrida las fotos se acumulan:
+  // a ~135 KB cada una en base64, treinta y pico alcanzan el techo. Sin partir
+  // el envío, el auditor perdería la recorrida entera por un 413.
+  const MAX_TANDA = 3.5 * 1024 * 1024;
+
+  /** Parte las operaciones en tandas que no superen el tope. */
+  function enTandas(operaciones, tope = MAX_TANDA) {
+    const tandas = [];
+    let actual = [], peso = 0;
+
+    for (const op of operaciones) {
+      const suyo = JSON.stringify(op).length;
+      // Una operación sola más grande que el tope viaja igual: partirla no es
+      // posible y el servidor dirá qué pasa. Es preferible a descartarla en
+      // silencio.
+      if (actual.length && peso + suyo > tope) {
+        tandas.push(actual);
+        actual = []; peso = 0;
+      }
+      actual.push(op);
+      peso += suyo;
+    }
+    if (actual.length) tandas.push(actual);
+    return tandas;
+  }
+
   async function sincronizar({ silencioso = true } = {}) {
     if (sincronizando) return estado();
 
@@ -50,18 +81,20 @@ const Sync = (() => {
       const operaciones = pendientes.map((op) => ({
         uuid: op.uuid, metodo: op.metodo, ruta: op.ruta, body: op.body,
       }));
-      const r = await API.post('/api/sync', { operaciones });
 
       let ok = 0, fallidas = 0;
-      for (const res of r.resultados) {
-        if (res.estado === 'OK' || res.estado === 'DUPLICADA') {
-          await Store.quitarDeCola(res.uuid);
-          ok++;
-        } else {
-          // Un error del servidor no se reintenta indefinidamente: se marca
-          // para que el auditor lo vea en el detalle de sincronización.
-          await Store.marcarIntento(res.uuid, res.error);
-          fallidas++;
+      for (const tanda of enTandas(operaciones)) {
+        const r = await API.post('/api/sync', { operaciones: tanda });
+        for (const res of r.resultados) {
+          if (res.estado === 'OK' || res.estado === 'DUPLICADA') {
+            await Store.quitarDeCola(res.uuid);
+            ok++;
+          } else {
+            // Un error del servidor no se reintenta indefinidamente: se marca
+            // para que el auditor lo vea en el detalle de sincronización.
+            await Store.marcarIntento(res.uuid, res.error);
+            fallidas++;
+          }
         }
       }
 
@@ -112,5 +145,6 @@ const Sync = (() => {
     sincronizar();
   }
 
-  return { sincronizar, sesionRenovada, estado, detalle, alCambiar, iniciar };
+  return { sincronizar, sesionRenovada, estado, detalle, alCambiar, iniciar,
+           enTandas, MAX_TANDA };
 })();

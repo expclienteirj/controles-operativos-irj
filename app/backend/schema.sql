@@ -407,6 +407,19 @@ CREATE TABLE IF NOT EXISTS sync_operaciones (
     resultado   TEXT
 );
 
+-- Intentos de login fallidos, para frenar la prueba de contraseñas.
+--
+-- Vive en la base y no en memoria porque en serverless cada request corre en
+-- un proceso nuevo: un contador en RAM se reiniciaría en cada intento y no
+-- frenaría nada. Solo se registran los fallos; un login exitoso borra los del
+-- usuario y los de su IP.
+CREATE TABLE IF NOT EXISTS intentos_login (
+    id      INTEGER PRIMARY KEY,
+    clave   TEXT NOT NULL,          -- 'usuario:jperez' | 'ip:190.1.2.3'
+    momento TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_intentos_login   ON intentos_login(clave, momento);
 CREATE INDEX IF NOT EXISTS idx_controles_periodo ON controles_limpieza(periodo);
 CREATE INDEX IF NOT EXISTS idx_desvios_control  ON desvios(control_id);
 CREATE INDEX IF NOT EXISTS idx_items_sector     ON items_limpieza(sector_id);

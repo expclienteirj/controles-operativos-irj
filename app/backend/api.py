@@ -68,6 +68,15 @@ def ruta(metodo: str, patron: str, rol: str = "auditor"):
 def login(ctx):
     usuario = (ctx["body"].get("usuario") or "").strip()
     password = ctx["body"].get("password") or ""
+    ip = ctx.get("ip")
+
+    # Freno antes de mirar la contraseña: sin esto, con la app publicada en
+    # internet cualquiera puede probar claves sin límite. El mensaje no dice si
+    # el usuario existe, igual que el de credenciales incorrectas.
+    faltan = services.login_bloqueado(ctx["conn"], usuario, ip)
+    if faltan is not None:
+        raise ErrorAPI(
+            f"Demasiados intentos fallidos. Reintentá en {faltan} minuto(s).", 429)
 
     fila = ctx["conn"].execute(
         "SELECT id, usuario, nombre, rol, password_hash, activo FROM usuarios "
@@ -77,8 +86,10 @@ def login(ctx):
     # usuario existe ni permitir distinguirlo por tiempo de respuesta.
     hash_ref = fila["password_hash"] if fila else db.hash_password("inexistente")
     if not db.verificar_password(password, hash_ref) or not fila or not fila["activo"]:
+        services.registrar_intento_fallido(ctx["conn"], usuario, ip)
         raise ErrorAPI("Usuario o contraseña incorrectos", 401)
 
+    services.limpiar_intentos(ctx["conn"], usuario, ip)
     token = secrets.token_urlsafe(32)
     ctx["conn"].execute("INSERT INTO sesiones (token, usuario_id) VALUES (?,?)",
                         (token, fila["id"]))
@@ -1320,6 +1331,22 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             raise ErrorAPI("JSON inválido")
 
+    def _ip_cliente(self):
+        """IP de quien pide, para el freno de intentos de login.
+
+        Detrás del borde de Vercel la conexión viene del proxy, así que la IP
+        real está en X-Forwarded-For; el primer valor de la lista es el cliente
+        y el resto son los saltos intermedios. Sirviendo directo con
+        `http.server` no hay proxy y se usa la dirección de la conexión.
+        """
+        reenviada = self.headers.get("X-Forwarded-For", "")
+        if reenviada:
+            return reenviada.split(",")[0].strip()
+        try:
+            return self.client_address[0]
+        except (AttributeError, IndexError):
+            return None
+
     def _manejar(self, metodo):
         camino = urlparse(self.path).path
         if not camino.startswith("/api/"):
@@ -1331,7 +1358,9 @@ class Handler(BaseHTTPRequestHandler):
             conn = db.conectar()
             token, sesion = self._sesion(conn)
             resultado = _despachar(
-                {"conn": conn, "sesion": sesion, "token": token}, metodo, self.path, body)
+                {"conn": conn, "sesion": sesion, "token": token,
+                 "ip": self._ip_cliente()},
+                metodo, self.path, body)
 
             if isinstance(resultado, dict) and "__binario__" in resultado:
                 return self._responder(200, resultado["__binario__"],

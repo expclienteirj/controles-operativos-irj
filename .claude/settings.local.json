@@ -143,7 +143,29 @@
       "Bash(git init *)",
       "Bash(git add *)",
       "Bash(grep -E \"^\\\\.env$\")",
-      "Bash(xargs -0 du -ch)"
+      "Bash(xargs -0 du -ch)",
+      "Bash(git -c 'user.name=Matias Arancibia' -c user.email=matiarancibia91@gmail.com commit -q -m ' *)",
+      "Bash(ssh -T -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 git@github.com)",
+      "Bash(git push *)",
+      "Bash(gh auth *)",
+      "Bash(awk '{print \"  \"$9}')",
+      "Bash(ssh-keygen -lf ~/.ssh/id_ed25519.pub)",
+      "Bash(pbcopy)",
+      "Bash(ssh-keygen -lf ~/.ssh/id_ed25519_expclienteirj.pub)",
+      "Bash(ssh -T -o ConnectTimeout=15 git@github-expcliente)",
+      "Bash(git remote *)",
+      "Bash(echo \"  remoto: $\\(git remote get-url origin\\)\")",
+      "Bash(git config *)",
+      "Bash(python3 \"/private/tmp/claude-501/-Users-matiasarancibia-Desktop-Aeropuertos-Proyecto-LIMPIEZA/ab5202e2-4eb3-4089-bc53-8fae008f7a58/scratchpad/verificar_env.py\")",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__claude-in-chrome__navigate",
+      "mcp__claude-in-chrome__computer",
+      "Bash(python3 -m unittest test_login_limite test_api.TestFrenoDeLogin)",
+      "Bash(node --check js/sync.js)",
+      "Bash(curl -s http://localhost:8080/js/sync.js)",
+      "Bash(lsof -ti:8080)",
+      "Bash(xargs -I{} ps -p {} -o pid=,command=)",
+      "Bash(git -c user.name=expclienteirj -c user.email=expclienteirj@users.noreply.github.com commit -q -m ' *)"
     ]
   }
 }

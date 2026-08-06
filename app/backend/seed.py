@@ -31,6 +31,12 @@ CONFIG = [
     ("general", "horario_operativo_fin", "21:00", "Fin del horario operativo"),
     ("general", "horas_operativas_dia", 14,
      "Horas operativas por día. Base del 100% exigido a pista y rodajes (3.10)"),
+    # Freno a la prueba de contraseñas. Con la app publicada en internet, el
+    # login queda expuesto a intentos automáticos sin límite.
+    ("general", "login_max_intentos", 10,
+     "Intentos fallidos de login antes de bloquear. 0 desactiva el freno"),
+    ("general", "login_ventana_minutos", 15,
+     "Minutos que se miran hacia atrás para contar los intentos fallidos"),
     ("general", "inicio_verano", "10-01", "Fecha de cambio a temporada verano (MM-DD)"),
     ("general", "inicio_invierno", "04-01", "Fecha de cambio a temporada invierno (MM-DD)"),
     ("general", "foto_obligatoria_desvio", True,
