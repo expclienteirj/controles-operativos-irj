@@ -165,7 +165,9 @@
       "Bash(curl -s http://localhost:8080/js/sync.js)",
       "Bash(lsof -ti:8080)",
       "Bash(xargs -I{} ps -p {} -o pid=,command=)",
-      "Bash(git -c user.name=expclienteirj -c user.email=expclienteirj@users.noreply.github.com commit -q -m ' *)"
+      "Bash(git -c user.name=expclienteirj -c user.email=expclienteirj@users.noreply.github.com commit -q -m ' *)",
+      "Bash(curl -s -w '  [HTTP %{http_code}]\\\\n' --max-time 30 -X POST https://controles-operativos-irj.vercel.app/api/login -H 'Content-Type: application/json' -d '{\"usuario\":\"__diagnostico__\",\"password\":\"x\"}')",
+      "Bash(curl -s -w '  [HTTP %{http_code}]\\\\n' --max-time 30 -X POST https://controles-operativos-irj.vercel.app/api/login -H 'Content-Type: application/json' -d '{\"usuario\":\"admin\",\"password\":\"probablemente-incorrecta\"}')"
     ]
   }
 }

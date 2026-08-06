@@ -1769,21 +1769,29 @@ def login_bloqueado(conn: sqlite3.Connection, usuario: str,
         return None
 
     claves = [f"usuario:{usuario}"] + ([f"ip:{ip}"] if ip else [])
-    for clave in claves:
-        fila = conn.execute(
-            "SELECT COUNT(*) c, MIN(momento) primero FROM intentos_login "
-            "WHERE clave = ? AND momento > datetime('now', ?)",
-            (clave, f"-{ventana} minutes")).fetchone()
-        if fila and fila["c"] >= maximo:
-            # Se espera a que el más viejo salga de la ventana.
-            from datetime import datetime, timedelta
-            try:
-                vence = (datetime.strptime(fila["primero"], "%Y-%m-%d %H:%M:%S")
-                         + timedelta(minutes=ventana))
-                faltan = int((vence - datetime.utcnow()).total_seconds() // 60) + 1
-            except (ValueError, TypeError):
-                faltan = ventana
-            return max(1, faltan)
+
+    # Las dos claves se resuelven en una sola consulta: contra una base remota
+    # cada ida y vuelta cuesta más que el trabajo que hace, y esto está en el
+    # camino de todos los logins.
+    marcadores = ",".join("?" for _ in claves)
+    filas = conn.execute(
+        f"SELECT clave, COUNT(*) c, MIN(momento) primero FROM intentos_login "
+        f"WHERE clave IN ({marcadores}) AND momento > datetime('now', ?) "
+        f"GROUP BY clave",
+        (*claves, f"-{ventana} minutes")).fetchall()
+
+    for fila in filas:
+        if fila["c"] < maximo:
+            continue
+        # Se espera a que el intento más viejo salga de la ventana.
+        from datetime import datetime, timedelta
+        try:
+            vence = (datetime.strptime(fila["primero"], "%Y-%m-%d %H:%M:%S")
+                     + timedelta(minutes=ventana))
+            faltan = int((vence - datetime.utcnow()).total_seconds() // 60) + 1
+        except (ValueError, TypeError):
+            faltan = ventana
+        return max(1, faltan)
     return None
 
 

@@ -1,7 +1,3 @@
--- Datos maestros de Controles Operativos IRJ (seed).
--- Generado ejecutando seed.py contra Postgres y volcando el resultado.
--- Ejecutar en el SQL Editor DESPUÉS de esquema-supabase.sql. Es idempotente.
-
 
 -- config: 47 fila(s)
 INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('aeropuerto_categoria', '"G5"', 'general', 'Categoría del aeropuerto', '1') ON CONFLICT DO NOTHING;
