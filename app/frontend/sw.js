@@ -1,19 +1,29 @@
 /* Service worker — la app tiene que abrir sin conexión.
  *
  * Estrategia:
- *   - Shell (HTML, CSS, JS): network-first con fallback a caché. Con red se
- *     toma siempre la versión publicada; sin red, la copia guardada. Se
- *     descartó cache-first porque dejaba la tablet ejecutando código viejo
- *     hasta que alguien se acordara de subir el número de VERSION: en una app
- *     que calcula porcentajes de certificación, un bug corregido tiene que
- *     llegar al dispositivo sin depender de eso.
+ *   - Shell (HTML, CSS, JS): stale-while-revalidate. Se responde con la copia
+ *     guardada, así que la app abre sin esperar a la red, y en paralelo se baja
+ *     la versión publicada para dejarla lista. Antes esto era network-first, y
+ *     el motivo sigue valiendo: en una app que calcula porcentajes de
+ *     certificación, un bug corregido tiene que llegar al dispositivo sin
+ *     depender de que alguien se acuerde de subir el número de VERSION. Lo que
+ *     no valía era el precio — con la señal de plataforma, abrir la app
+ *     costaba esperar once descargas antes de ver nada.
+ *
+ *     La garantía se conserva porque la revalidación igual ocurre: la versión
+ *     nueva queda en caché para la próxima apertura, y si se detecta que el
+ *     archivo cambió se avisa a la pantalla para que ofrezca recargar. No se
+ *     recarga sola: hacerlo en medio de una recorrida le borraría al auditor
+ *     el desvío que está escribiendo.
  *   - Estáticos inmutables (íconos): cache-first, no cambian.
  *   - API: siempre a la red. Nunca se cachean respuestas ni se sirven datos
  *     viejos como si fueran actuales; de eso se ocupa IndexedDB, que sí sabe
- *     distinguir "guardado local" de "confirmado por el servidor".
+ *     distinguir "guardado local" de "confirmado por el servidor". Las fotos
+ *     son la excepción y las cachea el navegador por su cabecera, no acá: su
+ *     ruta lleva fecha y sufijo aleatorio, así que nunca cambia de contenido.
  */
 
-const VERSION = 'irj-v22';
+const VERSION = 'irj-v23';
 const SHELL = [
   '/',
   '/index.html',
@@ -49,6 +59,35 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+/**
+ * ¿La respuesta que acaba de llegar es distinta de la que había guardada?
+ *
+ * Se comparan las marcas del servidor, de la más confiable a la menos: Vercel
+ * manda ETag para los estáticos y el servidor de la Mac manda Content-Length.
+ * Sin ninguna marca comparable se responde que no cambió: avisar de una
+ * actualización que no ocurrió entrena al auditor a ignorar el aviso.
+ */
+function cambio(vieja, nueva) {
+  for (const marca of ['ETag', 'Last-Modified', 'Content-Length']) {
+    const a = vieja.headers.get(marca);
+    const b = nueva.headers.get(marca);
+    if (a && b) return a !== b;
+  }
+  return false;
+}
+
+// Un solo aviso por vida del worker: el shell son once archivos y once toasts
+// seguidos diciendo lo mismo son ruido, no información.
+let avisado = false;
+
+function avisarActualizacion() {
+  if (avisado) return;
+  avisado = true;
+  self.clients.matchAll({ type: 'window' }).then((clientes) => {
+    clientes.forEach((c) => c.postMessage({ tipo: 'shell-actualizado' }));
+  });
+}
+
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
@@ -74,17 +113,26 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Shell: network-first. La caché es el plan B para trabajar sin señal.
+  // Shell: stale-while-revalidate.
   e.respondWith(
-    fetch(e.request)
-      .then((r) => {
+    caches.open(VERSION).then((cache) => cache.match(e.request).then((guardada) => {
+      const red = fetch(e.request).then((r) => {
         if (r.ok) {
-          const copia = r.clone();
-          caches.open(VERSION).then((c) => c.put(e.request, copia));
+          if (guardada && cambio(guardada, r)) avisarActualizacion();
+          cache.put(e.request, r.clone());
         }
         return r;
-      })
-      .catch(() => caches.match(e.request)
-        .then((c) => c || caches.match('/index.html')))
+      });
+
+      if (guardada) {
+        // La revalidación sigue después de haber respondido. Que falle no
+        // puede tumbar una respuesta que ya se entregó bien.
+        e.waitUntil(red.catch(() => {}));
+        return guardada;
+      }
+      // Primera visita, o archivo fuera del shell: no hay más remedio que
+      // esperar a la red. Sin red, el index deja abrir la app igual.
+      return red.catch(() => caches.match('/index.html'));
+    }))
   );
 });

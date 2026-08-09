@@ -45,6 +45,27 @@ const UI = (() => {
     cont.appendChild(el);
   }
 
+  /**
+   * Toast con una acción y sin vencimiento.
+   *
+   * Para avisos que el auditor tiene que poder atender cuando le convenga, no
+   * cuando aparecen: lo usa el aviso de versión nueva, que no puede recargar
+   * la app sola en medio de una recorrida ni desaparecer antes de que la lea.
+   */
+  function toastAccion(mensaje, etiqueta, alTocar) {
+    const cont = document.getElementById('toasts');
+    const el = document.createElement('div');
+    el.className = 'toast con-accion';
+    el.innerHTML = `<span class="txt"></span>
+                    <button type="button" class="deshacer"></button>`;
+    el.querySelector('.txt').textContent = mensaje;
+    const boton = el.querySelector('.deshacer');
+    boton.textContent = etiqueta;
+    boton.onclick = () => { el.remove(); alTocar(); };
+    cont.appendChild(el);
+    return () => el.remove();
+  }
+
   /* --------------------------------------------------------------- modal -- */
 
   /**
@@ -65,6 +86,12 @@ const UI = (() => {
   // Entradas de historial que consumimos nosotros al cerrar a mano y que el
   // manejador de popstate no debe volver a procesar.
   let atrasPropios = 0;
+
+  // Hay una entrada de historial libre, dejada por `cerrarParaNavegar`, que la
+  // próxima hoja debe reutilizar en vez de apilar otra encima. Sin esto, cada
+  // salto de hoja a hoja (parciales → día → control) deja una entrada muerta y
+  // el auditor tiene que tocar atrás una vez por hoja que haya atravesado.
+  let entradaLibre = false;
 
   const modalEl = () => document.getElementById('modal');
 
@@ -111,7 +138,12 @@ const UI = (() => {
     if (e.key === 'Escape' && pila.length) cerrarHoja();
   });
 
+  // Una navegación de verdad se lleva puesta la entrada que había quedado
+  // libre: a partir de acá la próxima hoja tiene que apilar la suya.
+  window.addEventListener('hashchange', () => { entradaLibre = false; });
+
   window.addEventListener('popstate', () => {
+    entradaLibre = false;
     // Cierre nuestro: ya bajamos la hoja, esto es solo el eco de history.back().
     if (atrasPropios > 0) { atrasPropios -= 1; return; }
     if (!pila.length) return;
@@ -137,9 +169,30 @@ const UI = (() => {
    */
   function abrirHoja(html, alMontar, { alIntentarCerrar = null } = {}) {
     pila.push({ html, alMontar, alIntentarCerrar });
-    history.pushState({ hoja: pila.length }, '');
+    if (entradaLibre) entradaLibre = false;   // se ocupa la que dejó la anterior
+    else history.pushState({ hoja: pila.length }, '');
     montarHojaActual();
     return cerrarHoja;
+  }
+
+  /**
+   * Cierra las hojas abiertas para dar paso a una navegación o a otra hoja.
+   *
+   * `cerrarHoja` consume su entrada de historial con `history.back()`, que es
+   * **asíncrono**: se encola. Quien cerraba y navegaba en el mismo tick
+   * —`cerrar(); ir(ruta)`— cambiaba el hash primero y el back encolado llegaba
+   * después y lo deshacía, devolviendo al auditor exactamente a donde estaba.
+   * El botón se veía muerto aunque hubiera navegado y vuelto.
+   *
+   * Acá no se retrocede: se baja la hoja y se deja su entrada libre. Si lo que
+   * sigue es una navegación, esa entrada queda como el paso intermedio y el
+   * atrás vuelve a la pantalla de origen; si es otra hoja, la reutiliza.
+   */
+  function cerrarParaNavegar() {
+    if (!pila.length) return;
+    pila = [];
+    ocultarModal();
+    entradaLibre = true;
   }
 
   /**
@@ -155,6 +208,7 @@ const UI = (() => {
     const { alIntentarCerrar } = pila[pila.length - 1];
     if (!forzar && alIntentarCerrar && !await alIntentarCerrar()) return;
     bajarHoja();
+    entradaLibre = false;          // esta ruta consume su propia entrada
     atrasPropios += 1;
     history.back();
   }
@@ -166,6 +220,7 @@ const UI = (() => {
     if (!n) return;
     pila = [];
     ocultarModal();
+    entradaLibre = false;          // esta ruta consume sus propias entradas
     // history.go(-n) es UNA navegación y dispara UN solo popstate, por muchas
     // entradas que retroceda. Sumar n acá dejaba el contador desfasado y los
     // siguientes "atrás" del auditor se perdían sin hacer nada.
@@ -383,7 +438,8 @@ const UI = (() => {
     return `${meses[parseInt(mes, 10) - 1]} ${anio}`;
   }
 
-  return { esc, toast, toastDeshacer, abrirHoja, cerrarHoja, cerrarTodas,
+  return { esc, toast, toastDeshacer, toastAccion,
+           abrirHoja, cerrarHoja, cerrarTodas, cerrarParaNavegar,
            confirmar, tomarFoto, calendarioMes,
            comprimirImagen, fecha, fechaLarga, fechaCorta, hora,
            hoyISO, ahoraISO, periodoActual, nombrePeriodo };

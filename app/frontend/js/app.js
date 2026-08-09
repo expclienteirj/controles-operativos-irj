@@ -25,8 +25,22 @@ const App = (() => {
       return pantallaSinAlmacenamiento(e);
     }
 
+    // La validación de la sesión y el catálogo de sectores viajan juntas. El
+    // token sale del almacenamiento local, así que pedir los sectores no
+    // depende de que el servidor haya contestado lo otro: en serie, abrir la
+    // app costaba dos esperas completas de red antes de la primera pantalla.
+    let catalogosListos = false;
     try {
-      usuario = await API.restaurarSesion();
+      const guardada = await API.prepararSesion();
+      if (guardada.token) {
+        [usuario] = await Promise.all([
+          API.validarSesion(guardada),
+          cargarCatalogos(),
+        ]);
+        catalogosListos = true;
+      } else {
+        usuario = null;
+      }
     } catch (e) { usuario = null; }
 
     Sync.iniciar();
@@ -34,7 +48,7 @@ const App = (() => {
     window.addEventListener('hashchange', enrutar);
 
     if (!usuario) return vistaLogin();
-    await cargarCatalogos();
+    if (!catalogosListos) await cargarCatalogos();
     enrutar();
   }
 
@@ -278,7 +292,7 @@ const App = (() => {
       </div>`, (hoja, cerrar) => {
       hoja.querySelector('[data-cerrar]').onclick = cerrar;
       hoja.querySelectorAll('[data-ir-novedad]').forEach((b) => {
-        b.onclick = () => { cerrar(); ir(b.dataset.irNovedad); };
+        b.onclick = () => { UI.cerrarParaNavegar(); ir(b.dataset.irNovedad); };
       });
     });
   }
@@ -356,22 +370,22 @@ const App = (() => {
     layout('Controles Operativos IRJ', usuario.nombre,
            '<div class="vacio">Cargando…</div>');
 
-    let hoy;
-    try {
-      hoy = await API.get('/api/controles/hoy');
-      await Store.set('meta', 'cache:hoy', hoy);
-    } catch (e) {
-      hoy = await Store.get('meta', 'cache:hoy');
-      if (!hoy) {
-        return $('.contenido').innerHTML =
-          '<div class="aviso error">No se pudo cargar el control del día.</div>';
-      }
-    }
+    // Las dos llamadas de esta pantalla salen juntas: el onboarding no depende
+    // del control del día, y encadenarlas hacía esperar dos veces a la red en
+    // la primera pantalla que ve el auditor.
+    const [hoy, onboarding] = await Promise.all([
+      API.get('/api/controles/hoy')
+        .then((r) => Store.set('meta', 'cache:hoy', r).then(() => r))
+        .catch(() => Store.get('meta', 'cache:hoy')),
+      // Estado del inventario, para avisarle al admin qué falta configurar.
+      usuario.rol === 'admin'
+        ? API.get('/api/onboarding').catch(() => null)   // opcional
+        : Promise.resolve(null),
+    ]);
 
-    // Estado del inventario, para avisarle al admin qué falta configurar.
-    let onboarding = null;
-    if (usuario.rol === 'admin') {
-      try { onboarding = await API.get('/api/onboarding'); } catch (e) { /* opcional */ }
+    if (!hoy) {
+      return $('.contenido').innerHTML =
+        '<div class="aviso error">No se pudo cargar el control del día.</div>';
     }
 
     $('.contenido').innerHTML = `
@@ -456,7 +470,7 @@ const App = (() => {
       </div>`, (hoja, cerrar) => {
       hoja.querySelector('[data-cerrar]').onclick = cerrar;
       hoja.querySelectorAll('[data-ir-dia]').forEach((b) => {
-        b.onclick = () => { cerrar(); abrirDia(periodo, b.dataset.irDia); };
+        b.onclick = () => { UI.cerrarParaNavegar(); abrirDia(periodo, b.dataset.irDia); };
       });
     });
   }
@@ -501,10 +515,10 @@ const App = (() => {
       </div>`, (hoja, cerrar) => {
       hoja.querySelector('[data-cancelar]').onclick = cerrar;
       hoja.querySelectorAll('[data-ver]').forEach((b) => {
-        b.onclick = () => { cerrar(); ir(`/control/${b.dataset.ver}`); };
+        b.onclick = () => { UI.cerrarParaNavegar(); ir(`/control/${b.dataset.ver}`); };
       });
       hoja.querySelectorAll('[data-nuevo]').forEach((b) => {
-        b.onclick = () => { cerrar(); crearControl(fecha, b.dataset.nuevo); };
+        b.onclick = () => { UI.cerrarParaNavegar(); crearControl(fecha, b.dataset.nuevo); };
       });
     });
   }
@@ -701,22 +715,18 @@ const App = (() => {
     layout('Limpieza', UI.nombrePeriodo(periodo),
            '<div class="vacio">Cargando controles…</div>', { volver: '/' });
 
-    let controles = [];
-    try {
-      const r = await API.get(`/api/controles?periodo=${periodo}`);
-      controles = r.controles;
-      await Store.set('meta', `cache:controles:${periodo}`, controles);
-    } catch (e) {
-      controles = (await Store.get('meta', `cache:controles:${periodo}`)) || [];
-    }
-
-    let mes = null;
-    try {
-      mes = await API.get(`/api/periodos/${periodo}/completitud`);
-      await Store.set('meta', `cache:completitud:${periodo}`, mes);
-    } catch (e) {
-      mes = await Store.get('meta', `cache:completitud:${periodo}`);
-    }
+    // Las dos son del mismo período y no se necesitan entre sí: van juntas.
+    const [controles, mes] = await Promise.all([
+      API.get(`/api/controles?periodo=${periodo}`)
+        .then((r) => Store.set('meta', `cache:controles:${periodo}`, r.controles)
+          .then(() => r.controles))
+        .catch(() => Store.get('meta', `cache:controles:${periodo}`)
+          .then((c) => c || [])),
+      API.get(`/api/periodos/${periodo}/completitud`)
+        .then((r) => Store.set('meta', `cache:completitud:${periodo}`, r)
+          .then(() => r))
+        .catch(() => Store.get('meta', `cache:completitud:${periodo}`)),
+    ]);
 
     // Lista de días, del más reciente al más viejo: el auditor casi siempre
     // busca hoy o ayer, no el día 1.
@@ -2228,6 +2238,22 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {
       // Sin service worker la app funciona online; no vale interrumpir al usuario.
     });
+  });
+
+  /* Aviso de versión nueva.
+   *
+   * El worker sirve el shell desde la caché para que la app abra al instante y
+   * revalida por detrás. Cuando esa revalidación encuentra que el código
+   * cambió, avisa acá. No se recarga sola a propósito: la recarga en medio de
+   * una recorrida se lleva puesto el desvío que el auditor está escribiendo.
+   * El toast no vence, así que el aviso lo espera hasta que pueda atenderlo, y
+   * si nunca lo toca la versión nueva entra igual en la próxima apertura.
+   */
+  let avisoVersion = null;
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (!e.data || e.data.tipo !== 'shell-actualizado' || avisoVersion) return;
+    avisoVersion = UI.toastAccion(
+      'Hay una versión nueva de la app.', 'Actualizar', () => location.reload());
   });
 }
 

@@ -96,11 +96,24 @@ const API = (() => {
   const usuarioActual = () => _usuario;
   const esAdmin = () => !!_usuario && _usuario.rol === 'admin';
 
-  /** Restaura el token guardado y valida que siga vigente. */
-  async function restaurarSesion() {
-    const { token: t, usuario } = await Store.leerSesion();
+  /**
+   * Deja activo el token guardado en la tablet. No toca la red.
+   *
+   * Está separado de la validación para que el arranque pueda pedir la sesión
+   * y el catálogo de sectores a la vez: el token sale del almacenamiento
+   * local, así que la segunda llamada no tiene por qué esperar a la primera.
+   */
+  async function prepararSesion() {
+    const guardada = await Store.leerSesion();
+    setToken(guardada.token || null);
+    _usuario = guardada.token ? (guardada.usuario || null) : null;
+    return guardada;
+  }
+
+  /** Valida contra el servidor una sesión ya preparada. */
+  async function validarSesion(guardada) {
+    const { token: t, usuario } = guardada || await Store.leerSesion();
     if (!t) return null;
-    setToken(t);
 
     if (!navigator.onLine) return (_usuario = usuario);   // offline: caché
     try {
@@ -115,6 +128,11 @@ const API = (() => {
       }
       return (_usuario = usuario);
     }
+  }
+
+  /** Restaura el token guardado y valida que siga vigente. */
+  async function restaurarSesion() {
+    return validarSesion(await prepararSesion());
   }
 
   /**
@@ -154,5 +172,6 @@ const API = (() => {
   }
 
   return { get, post, put, del, mutar, getCacheado, descargar, login, logout,
-           restaurarSesion, usuarioActual, esAdmin, setToken, getToken, ErrorAPI };
+           restaurarSesion, prepararSesion, validarSesion,
+           usuarioActual, esAdmin, setToken, getToken, ErrorAPI };
 })();
