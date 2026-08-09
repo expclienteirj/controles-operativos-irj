@@ -40,6 +40,26 @@ MAX_FOTO = 8 * 1024 * 1024
 # red y necesita poder subir lo encolado cuando vuelva.
 SESION_DIAS = 30
 
+# Cada cuánto se refresca `sesiones.ultimo_uso`. Ver `_conviene_refrescar_sesion`.
+FRESCURA_SESION = 15 * 60
+
+
+def _conviene_refrescar_sesion(ultimo_uso) -> bool:
+    """¿Hace falta actualizar `ultimo_uso`, o la marca sigue siendo buena?
+
+    Las marcas se guardan como texto UTC con el formato de `datetime('now')`
+    de SQLite, que es el mismo que produce la función homónima de `pgcompat`.
+    Ante cualquier valor que no se pueda leer se refresca: perder la marca
+    vencería la sesión de un auditor que sí está trabajando.
+    """
+    import datetime as _dt
+    try:
+        marca = _dt.datetime.strptime(str(ultimo_uso)[:19], "%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return True
+    ahora = _dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None)
+    return (ahora - marca).total_seconds() >= FRESCURA_SESION
+
 
 class ErrorAPI(Exception):
     def __init__(self, mensaje: str, codigo: int = 400):
@@ -1172,8 +1192,15 @@ def get_foto(ctx, nombre):
         raise ErrorAPI(str(e), 400 if "inválida" in str(e) else 502)
     if binario is None:
         raise ErrorAPI("Foto no encontrada", 404)
+    # Única respuesta de la API que sí se cachea, y puede hacerlo para siempre:
+    # el nombre lleva fecha, hora y un sufijo aleatorio (ver `fotos.py`), así
+    # que una ruta identifica un archivo que nunca cambia. Sin esto la misma
+    # foto viajaba de Storage a la tablet cada vez que se abría el sector o el
+    # informe que la muestra. `private`: la evidencia no puede quedar en cachés
+    # compartidas del camino.
     return {"__binario__": binario,
-            "__tipo__": mimetypes.guess_type(nombre)[0] or "image/jpeg"}
+            "__tipo__": mimetypes.guess_type(nombre)[0] or "image/jpeg",
+            "__cache__": "private, max-age=31536000, immutable"}
 
 
 # ------------------------------------------------------------------ informes --
@@ -1305,7 +1332,7 @@ class Handler(BaseHTTPRequestHandler):
             return None, None
 
         fila = conn.execute(
-            "SELECT s.token, u.id usuario_id, u.usuario, u.nombre, u.rol "
+            "SELECT s.token, s.ultimo_uso, u.id usuario_id, u.usuario, u.nombre, u.rol "
             "FROM sesiones s JOIN usuarios u ON u.id = s.usuario_id "
             "WHERE s.token = ? AND u.activo = 1 "
             "AND s.ultimo_uso >= datetime('now', ?)",
@@ -1313,9 +1340,15 @@ class Handler(BaseHTTPRequestHandler):
         if not fila:
             return token, None
 
-        conn.execute(
-            "UPDATE sesiones SET ultimo_uso = datetime('now') WHERE token = ?", (token,))
-        conn.commit()
+        # `ultimo_uso` solo marca actividad para vencer la sesión a los 30 días,
+        # así que refrescarlo en cada request no aporta nada y cuesta una
+        # escritura más un commit en el camino crítico de todas las llamadas.
+        # Se refresca cada FRESCURA_SESION segundos, que a la escala de un
+        # vencimiento de 30 días es indistinguible.
+        if _conviene_refrescar_sesion(fila["ultimo_uso"]):
+            conn.execute("UPDATE sesiones SET ultimo_uso = datetime('now') "
+                         "WHERE token = ?", (token,))
+            conn.commit()
         return token, {"usuario_id": fila["usuario_id"], "rol": fila["rol"],
                        "usuario": fila["usuario"], "nombre": fila["nombre"]}
 
@@ -1355,7 +1388,7 @@ class Handler(BaseHTTPRequestHandler):
         conn = None
         try:
             body = self._body()
-            conn = db.conectar()
+            conn = db.tomar_conexion()
             token, sesion = self._sesion(conn)
             resultado = _despachar(
                 {"conn": conn, "sesion": sesion, "token": token,
@@ -1365,6 +1398,7 @@ class Handler(BaseHTTPRequestHandler):
             if isinstance(resultado, dict) and "__binario__" in resultado:
                 return self._responder(200, resultado["__binario__"],
                                        resultado["__tipo__"],
+                                       cache=resultado.get("__cache__"),
                                        descarga=resultado.get("__descarga__"))
             self._responder(200, resultado)
 
@@ -1383,7 +1417,7 @@ class Handler(BaseHTTPRequestHandler):
             self._responder(500, {"error": "Error interno del servidor"})
         finally:
             if conn:
-                conn.close()
+                db.devolver_conexion(conn)
 
     def _servir_estatico(self, camino):
         if camino in ("/", ""):

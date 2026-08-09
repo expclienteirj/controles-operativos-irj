@@ -88,6 +88,118 @@ def conectar(path: str | None = None, url: str | None = None):
     return conn
 
 
+# ==========================================================================
+# Reuso de conexiones
+# ==========================================================================
+#
+# Abrir una conexión a Postgres no es gratis: contra el pooler de Supabase son
+# un handshake TLS más la autenticación, del orden de 100 ms. La API abría una
+# por request y la cerraba al terminar, así que ese costo se pagaba en cada
+# llamada —incluso en las que resuelven con dos consultas.
+#
+# El proceso sobrevive entre requests en los dos despliegues (el
+# ThreadingHTTPServer de la Mac y el contenedor tibio de Vercel), así que la
+# conexión se puede guardar y volver a usar. Se guarda una lista y no una sola
+# porque el servidor local atiende con varios hilos y psycopg no admite que dos
+# los compartan.
+#
+# SQLite queda afuera a propósito: abrir un archivo local no cuesta nada y
+# compartir la conexión entre hilos traería problemas sin ninguna ganancia.
+
+POOL_MAX = 4
+
+# Tras este tiempo sin usarse, la conexión se verifica antes de entregarla: el
+# pooler puede haberla cerrado del otro lado sin que este proceso se entere, y
+# eso no se nota hasta que falla la primera consulta del request.
+SEGUNDOS_VERIFICAR = 30
+
+_pool: list = []
+_pool_lock = None
+
+
+def _lock():
+    global _pool_lock
+    if _pool_lock is None:
+        import threading
+        _pool_lock = threading.Lock()
+    return _pool_lock
+
+
+def _viva(conn, ocioso: float) -> bool:
+    """¿La conexión sigue sirviendo? Verifica solo si estuvo ociosa un rato."""
+    if conn.cerrada:
+        return False
+    if ocioso < SEGUNDOS_VERIFICAR:
+        return True
+    try:
+        conn.execute("SELECT 1").fetchone()
+        return True
+    except Exception:                               # noqa: BLE001
+        return False
+
+
+def tomar_conexion(path: str | None = None, url: str | None = None):
+    """Conexión lista para atender un request. Devolverla con `devolver_conexion`."""
+    import time
+    url = url if url is not None else DB_URL
+    if not url:
+        return conectar(path, url)
+
+    while True:
+        with _lock():
+            if not _pool:
+                break
+            conn, desde = _pool.pop()
+        # Fuera del lock: verificar puede costar una ida y vuelta a la base y
+        # no hay razón para que eso bloquee a otro hilo que quiere una conexión.
+        if _viva(conn, time.time() - desde):
+            return conn
+        try:
+            conn.close()
+        except Exception:                           # noqa: BLE001
+            pass
+    return conectar(path, url)
+
+
+def devolver_conexion(conn) -> None:
+    """Cierra la conexión, o la guarda para el próximo request si conviene."""
+    import time
+    if conn is None:
+        return
+    if not usa_postgres() or conn.__class__.__name__ != "ConexionPG":
+        conn.close()
+        return
+
+    # Cualquier transacción a medias muere acá: lo que el request no confirmó
+    # no puede aparecer en el siguiente, que es lo que pasaría si la conexión
+    # volviera al pool con una transacción abierta.
+    try:
+        conn.rollback()
+    except Exception:                               # noqa: BLE001
+        try:
+            conn.close()
+        except Exception:                           # noqa: BLE001
+            pass
+        return
+
+    with _lock():
+        if len(_pool) < POOL_MAX and not conn.cerrada:
+            _pool.append((conn, time.time()))
+            return
+    conn.close()
+
+
+def cerrar_pool() -> None:
+    """Cierra lo guardado. Para los tests y para un apagado ordenado."""
+    with _lock():
+        guardadas, _pool[:] = list(_pool), []
+    for conn, _ in guardadas:
+        try:
+            conn.close()
+        except Exception:                           # noqa: BLE001
+            pass
+
+
 def crear_esquema(conn) -> None:
     with open(SCHEMA_PATH, encoding="utf-8") as f:
         ddl = f.read()

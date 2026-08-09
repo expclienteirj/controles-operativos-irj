@@ -24,45 +24,91 @@ import db
 # MÓDULO LIMPIEZA
 # ==========================================================================
 
+def _marcadores(n: int) -> str:
+    """`?,?,?` para un IN de n elementos."""
+    return ",".join("?" * n)
+
+
 def estado_control(conn: sqlite3.Connection, control_id: int) -> dict:
     """Estado de un control (Qn): % por sector y % general.
 
     Los sectores sin confirmar quedan como Sin datos y no promedian.
     """
-    sectores = []
-    for s in conn.execute(
-            "SELECT id, clave, nombre FROM sectores_limpieza "
-            "WHERE activo = 1 ORDER BY orden"):
-        items = [f["clave"] for f in conn.execute(
-            "SELECT clave FROM items_limpieza WHERE sector_id = ? AND activo = 1",
-            (s["id"],))]
+    return estados_controles(conn, [control_id])[control_id]
 
-        desvios = {f["clave"]: f["estado"] for f in conn.execute(
-            "SELECT i.clave, d.estado FROM desvios d "
+
+def estados_controles(conn: sqlite3.Connection,
+                      control_ids: list[int]) -> dict[int, dict]:
+    """`estado_control` para varios controles, con un número fijo de consultas.
+
+    Existe porque el informe mensual y la certificación necesitan el estado de
+    todos los controles cerrados del período. Resolviéndolos de a uno, cada
+    control costaba tres consultas por sector más las de equipamiento: con
+    nueve sectores y los dos turnos de un mes completo eran unas dos mil
+    consultas por pantalla, y contra Postgres eso se siente como varios
+    segundos de espera antes de la primera fila.
+
+    Acá se traen los desvíos, las confirmaciones y los faltantes de todos los
+    controles de una vez y se arman los mismos diccionarios en memoria: son
+    seis consultas más dos por período involucrado, sin importar cuántos
+    controles se pidan. El resultado por control es idéntico al que devolvía
+    la versión anterior — los 571 tests siguen siendo la verificación.
+    """
+    ids = list(dict.fromkeys(control_ids))
+    if not ids:
+        return {}
+    marcas = _marcadores(len(ids))
+    args = tuple(ids)
+
+    sectores = [dict(s) for s in conn.execute(
+        "SELECT id, clave, nombre FROM sectores_limpieza "
+        "WHERE activo = 1 ORDER BY orden")]
+
+    items_por_sector: dict[int, list[str]] = {}
+    for f in conn.execute(
+            "SELECT sector_id, clave FROM items_limpieza WHERE activo = 1"):
+        items_por_sector.setdefault(f["sector_id"], []).append(f["clave"])
+
+    desvios: dict[tuple[int, int], dict[str, str]] = {}
+    for f in conn.execute(
+            "SELECT d.control_id, i.sector_id, i.clave, d.estado FROM desvios d "
             "JOIN items_limpieza i ON i.id = d.item_id "
-            "WHERE d.control_id = ? AND i.sector_id = ?", (control_id, s["id"]))}
+            f"WHERE d.control_id IN ({marcas})", args):
+        desvios.setdefault((f["control_id"], f["sector_id"]), {})[f["clave"]] = \
+            f["estado"]
 
-        fila = conn.execute(
-            "SELECT confirmado FROM control_sectores "
-            "WHERE control_id = ? AND sector_id = ?", (control_id, s["id"])).fetchone()
-        confirmado = bool(fila and fila["confirmado"])
+    confirmados = {
+        (f["control_id"], f["sector_id"]) for f in conn.execute(
+            "SELECT control_id, sector_id, confirmado FROM control_sectores "
+            f"WHERE control_id IN ({marcas})", args)
+        if f["confirmado"]}
 
-        pct = calc.sector_limpieza(items, desvios, confirmado)
-        sectores.append({
-            "sector_id": s["id"], "clave": s["clave"], "nombre": s["nombre"],
-            "porcentaje": pct, "confirmado": confirmado,
-            "cantidad_desvios": len([e for e in desvios.values()
-                                     if e != calc.NO_VERIFICABLE]),
-            "estado": _semaforo_sector(pct, confirmado, desvios),
-        })
+    equipamiento = _equipamiento_controles(conn, ids)
 
-    equip = _equipamiento_control(conn, control_id)
-    general = calc.estado_general_limpieza([s["porcentaje"] for s in sectores])
+    salida = {}
+    for control_id in ids:
+        filas = []
+        for s in sectores:
+            propios = desvios.get((control_id, s["id"]), {})
+            confirmado = (control_id, s["id"]) in confirmados
+            pct = calc.sector_limpieza(items_por_sector.get(s["id"], []),
+                                       propios, confirmado)
+            filas.append({
+                "sector_id": s["id"], "clave": s["clave"], "nombre": s["nombre"],
+                "porcentaje": pct, "confirmado": confirmado,
+                "cantidad_desvios": len([e for e in propios.values()
+                                         if e != calc.NO_VERIFICABLE]),
+                "estado": _semaforo_sector(pct, confirmado, propios),
+            })
 
-    return {"control_id": control_id, "sectores": sectores,
-            "equipamiento": equip, "porcentaje_general": general,
-            "sectores_pendientes": [s["clave"] for s in sectores
+        salida[control_id] = {
+            "control_id": control_id, "sectores": filas,
+            "equipamiento": equipamiento[control_id],
+            "porcentaje_general": calc.estado_general_limpieza(
+                [s["porcentaje"] for s in filas]),
+            "sectores_pendientes": [s["clave"] for s in filas
                                     if not s["confirmado"]]}
+    return salida
 
 
 def _semaforo_sector(pct, confirmado, desvios) -> str:
@@ -95,26 +141,60 @@ def equipos_exigidos(conn: sqlite3.Connection, periodo: str) -> list[dict]:
 def _equipamiento_control(conn: sqlite3.Connection, control_id: int,
                           periodo: str | None = None) -> dict:
     """Disponibilidad de equipos en un control diario."""
+    return _equipamiento_controles(conn, [control_id], periodo)[control_id]
+
+
+def _equipamiento_controles(conn: sqlite3.Connection, control_ids: list[int],
+                            periodo: str | None = None) -> dict[int, dict]:
+    """Lo mismo para varios controles: dos consultas más dos por período.
+
+    `equipos_exigidos` depende solo del período, así que resolverla una vez por
+    control repetía el mismo par de consultas treinta o sesenta veces para
+    obtener siempre la misma lista.
+    """
+    ids = list(dict.fromkeys(control_ids))
+    if not ids:
+        return {}
+    marcas = _marcadores(len(ids))
+    args = tuple(ids)
+
     if periodo is None:
-        fila = conn.execute(
-            "SELECT periodo FROM controles_limpieza WHERE id = ?",
-            (control_id,)).fetchone()
-        periodo = fila["periodo"] if fila else periodo_actual()
+        periodos = {f["id"]: f["periodo"] for f in conn.execute(
+            f"SELECT id, periodo FROM controles_limpieza WHERE id IN ({marcas})",
+            args)}
+        # Un control que no existe se evalúa contra el período en curso, que es
+        # lo que hacía la versión de a uno.
+        del_control = {cid: periodos.get(cid) or periodo_actual() for cid in ids}
+    else:
+        del_control = {cid: periodo for cid in ids}
 
-    exigidos = [e for e in equipos_exigidos(conn, periodo) if e["exigido"]]
-    ids = {e["id"] for e in exigidos}
+    exigidos_por_periodo = {
+        p: [e for e in equipos_exigidos(conn, p) if e["exigido"]]
+        for p in sorted(set(del_control.values()))}
 
-    faltantes = [dict(f) for f in conn.execute(
-        "SELECT f.equipamiento_id, e.nombre, f.observacion FROM equipamiento_faltante f "
-        "JOIN equipamiento_limpieza e ON e.id = f.equipamiento_id "
-        "WHERE f.control_id = ?", (control_id,))]
-    # Solo cuentan los faltantes de equipos que efectivamente se exigen.
-    faltantes = [f for f in faltantes if f["equipamiento_id"] in ids]
+    faltantes: dict[int, list[dict]] = {}
+    for f in conn.execute(
+            "SELECT f.control_id, f.equipamiento_id, e.nombre, f.observacion "
+            "FROM equipamiento_faltante f "
+            "JOIN equipamiento_limpieza e ON e.id = f.equipamiento_id "
+            f"WHERE f.control_id IN ({marcas})", args):
+        faltantes.setdefault(f["control_id"], []).append(
+            {"equipamiento_id": f["equipamiento_id"], "nombre": f["nombre"],
+             "observacion": f["observacion"]})
 
-    return {"exigidos": len(exigidos), "faltantes": len(faltantes),
-            "detalle_faltantes": faltantes,
+    salida = {}
+    for control_id in ids:
+        exigidos = exigidos_por_periodo[del_control[control_id]]
+        exigidos_ids = {e["id"] for e in exigidos}
+        # Solo cuentan los faltantes de equipos que efectivamente se exigen.
+        propios = [f for f in faltantes.get(control_id, [])
+                   if f["equipamiento_id"] in exigidos_ids]
+        salida[control_id] = {
+            "exigidos": len(exigidos), "faltantes": len(propios),
+            "detalle_faltantes": propios,
             "porcentaje": calc.cumplimiento_equipamiento(len(exigidos),
-                                                         len(faltantes))}
+                                                         len(propios))}
+    return salida
 
 
 def _rango_medible(periodo: str, hoy: date | None = None) -> tuple[date, date]:
@@ -173,16 +253,26 @@ def equipamiento_mensual(conn: sqlite3.Connection, periodo: str,
             "WHERE c.periodo = ?", (periodo,)):
         marcas.setdefault(f["equipamiento_id"], set()).add(f["fecha"])
 
+    # Los tramos de baja de todos los equipos de una vez. Consultarlos por
+    # equipo dentro del bucle era una consulta por máquina exigida, siempre
+    # sobre la misma tabla. Se acotan al rango medible: un tramo que no lo toca
+    # queda descartado igual por el recorte de abajo.
+    tramos: dict[int, list[tuple[str, str | None]]] = {}
+    for f in conn.execute(
+            "SELECT equipamiento_id, desde, hasta FROM equipamiento_baja "
+            "WHERE desde <= ? AND (hasta IS NULL OR hasta >= ?)",
+            (hasta.isoformat(), desde.isoformat())):
+        tramos.setdefault(f["equipamiento_id"], []).append((f["desde"], f["hasta"]))
+
     por_equipo = []
     for e in exigidos:
         # Unión de ambas fuentes: una baja marcada por los dos caminos cuenta
         # una sola vez.
         dias = set(marcas.get(e["id"], set()))
-        for f in conn.execute(
-                "SELECT desde, hasta FROM equipamiento_baja WHERE equipamiento_id = ?",
-                (e["id"],)):
-            ini = max(date.fromisoformat(f["desde"]), desde)
-            fin = min(date.fromisoformat(f["hasta"]) if f["hasta"] else hasta, hasta)
+        for tramo_desde, tramo_hasta in tramos.get(e["id"], []):
+            ini = max(date.fromisoformat(tramo_desde), desde)
+            fin = min(date.fromisoformat(tramo_hasta) if tramo_hasta else hasta,
+                      hasta)
             while ini <= fin:
                 dias.add(ini.isoformat())
                 ini += timedelta(days=1)
@@ -331,19 +421,37 @@ def artefactos_baja(conn: sqlite3.Connection, periodo: str) -> list[dict]:
         "ORDER BY a.desde DESC", (ultimo, primero))]
 
 
+def clausuras_en_rango(conn: sqlite3.Connection, desde: str,
+                       hasta: str) -> list[tuple]:
+    """Clausuras que tocan el tramo, como (nucleo_id, equipo, cantidad, desde, hasta).
+
+    Sirve para resolver un mes entero con una sola consulta: la evaluación de
+    baños necesita el corte de cada día, y pedirlo día por día era una consulta
+    por jornada del período.
+    """
+    return [(f["nucleo_id"], f["equipo"], f["cantidad"], f["desde"], f["hasta"])
+            for f in conn.execute(
+                "SELECT nucleo_id, equipo, cantidad, desde, hasta FROM artefacto_baja "
+                "WHERE desde <= ? AND (hasta IS NULL OR hasta >= ?)", (hasta, desde))]
+
+
+def fuera_servicio_el_dia(clausuras: list[tuple], fecha: str) -> dict:
+    """Corte de `clausuras_en_rango` en una fecha. {nucleo_id: {equipo: cantidad}}."""
+    fuera = {}
+    for nucleo_id, equipo, cantidad, desde, hasta in clausuras:
+        if desde <= fecha and (hasta is None or hasta >= fecha):
+            n = fuera.setdefault(nucleo_id, {})
+            n[equipo] = n.get(equipo, 0) + cantidad
+    return fuera
+
+
 def artefactos_fuera_servicio_en(conn: sqlite3.Connection, fecha: str) -> dict:
     """Cuántos artefactos hay clausurados en una fecha, por núcleo y equipo.
 
     Devuelve {nucleo_id: {equipo: cantidad}}. Las clausuras superpuestas del
     mismo equipo se suman: son artefactos distintos del mismo tipo.
     """
-    fuera = {}
-    for f in conn.execute(
-            "SELECT nucleo_id, equipo, cantidad FROM artefacto_baja "
-            "WHERE desde <= ? AND (hasta IS NULL OR hasta >= ?)", (fecha, fecha)):
-        n = fuera.setdefault(f["nucleo_id"], {})
-        n[f["equipo"]] = n.get(f["equipo"], 0) + f["cantidad"]
-    return fuera
+    return fuera_servicio_el_dia(clausuras_en_rango(conn, fecha, fecha), fecha)
 
 
 def registrar_baja_artefacto(conn: sqlite3.Connection, nucleo_id: int, equipo: str,
@@ -643,8 +751,11 @@ def control_del_dia(conn: sqlite3.Connection, hoy: date | None = None) -> dict:
         "JOIN usuarios u ON u.id = c.auditor_id WHERE c.fecha = ?", (fecha,))}
 
     # Los dos turnos son exigibles, así que siempre se devuelven los dos: el
-    # que no existe viaja en None y la pantalla ofrece iniciarlo.
-    turnos = [{"turno": t, "control": _resumen_control(conn, filas.get(t))}
+    # que no existe viaja en None y la pantalla ofrece iniciarlo. Los estados
+    # se resuelven juntos: es la pantalla de entrada y la abre todo el mundo.
+    estados = estados_controles(conn, [f["id"] for f in filas.values()])
+    turnos = [{"turno": t,
+               "control": _resumen_control(conn, filas.get(t), estados)}
               for t in calc.TURNOS]
 
     return {"fecha": fecha, "periodo": periodo,
@@ -652,10 +763,11 @@ def control_del_dia(conn: sqlite3.Connection, hoy: date | None = None) -> dict:
             "mes": completitud_periodo(conn, periodo, hoy)}
 
 
-def _resumen_control(conn: sqlite3.Connection, fila) -> dict | None:
+def _resumen_control(conn: sqlite3.Connection, fila,
+                     estados: dict[int, dict] | None = None) -> dict | None:
     if not fila:
         return None
-    estado = estado_control(conn, fila["id"])
+    estado = (estados or {}).get(fila["id"]) or estado_control(conn, fila["id"])
     return {**dict(fila),
             "porcentaje": estado["porcentaje_general"],
             "sectores_confirmados": len(
@@ -715,7 +827,10 @@ def resumen_mensual_limpieza(conn: sqlite3.Connection, periodo: str) -> dict:
         "SELECT id, fecha, turno FROM controles_limpieza "
         "WHERE periodo = ? AND estado = 'CERRADO' ORDER BY fecha, turno", (periodo,))}
 
-    estados = {clave: estado_control(conn, cid) for clave, cid in controles.items()}
+    # De a uno esto eran ~32 consultas por control; en lote son las mismas seis
+    # sin importar si el mes tiene tres recorridas o sesenta y dos.
+    por_id = estados_controles(conn, list(controles.values()))
+    estados = {clave: por_id[cid] for clave, cid in controles.items()}
 
     filas = []
     for s in conn.execute("SELECT clave, nombre FROM sectores_limpieza "
@@ -751,12 +866,20 @@ def resumen_mensual_limpieza(conn: sqlite3.Connection, periodo: str) -> dict:
 # CERTIFICACIÓN MENSUAL (2.3)
 # ==========================================================================
 
-def certificacion(conn: sqlite3.Connection, periodo: str) -> dict:
+def certificacion(conn: sqlite3.Connection, periodo: str,
+                  resumen: dict | None = None) -> dict:
+    """Certificación del período.
+
+    `resumen`: el `resumen_mensual_limpieza` del mismo período, si el llamador
+    ya lo tiene. El informe mensual necesita los dos y calcularlo por dentro lo
+    hacía dos veces —el trabajo más caro de la app, repetido entero—.
+    """
     datos = conn.execute(
         "SELECT * FROM periodo_datos WHERE periodo = ?", (periodo,)).fetchone()
     datos = dict(datos) if datos else {}
 
-    resumen = resumen_mensual_limpieza(conn, periodo)
+    if resumen is None:
+        resumen = resumen_mensual_limpieza(conn, periodo)
     # Se cuentan TODAS las NC del período, abiertas y resueltas: la NC penaliza
     # en el momento en que se releva y resolverla no devuelve el punto perdido.
     # Contar solo las abiertas dejaba que el contratista recuperara certificación
@@ -1053,12 +1176,11 @@ def evaluar_banos(conn: sqlite3.Connection, datos: dict, periodo=None,
         return {"cumple": None, "motivo": "Requiere configuración: núcleos sanitarios"}
 
     periodo = periodo or periodo_actual()
-    instalados_por_nucleo = {}
-    for n in nucleos:
-        instalados_por_nucleo[n["id"]] = {
-            f["equipo"]: f["instalados"] for f in conn.execute(
-                "SELECT equipo, instalados FROM nucleo_equipos WHERE nucleo_id = ?",
-                (n["id"],))}
+    instalados_por_nucleo: dict[int, dict] = {n["id"]: {} for n in nucleos}
+    for f in conn.execute(
+            "SELECT nucleo_id, equipo, instalados FROM nucleo_equipos"):
+        if f["nucleo_id"] in instalados_por_nucleo:
+            instalados_por_nucleo[f["nucleo_id"]][f["equipo"]] = f["instalados"]
 
     desde, hasta = _rango_medible(periodo, hoy)
 
@@ -1075,10 +1197,13 @@ def evaluar_banos(conn: sqlite3.Connection, datos: dict, periodo=None,
                 "motivo": "Sin controles cerrados ni clausuras en el período"}
 
     if hay_auditoria or hay_bajas:
+        # Las clausuras del mes entero, una sola vez: el corte de cada día se
+        # saca de acá. Antes era una consulta por jornada del período.
+        clausuras = clausuras_en_rango(conn, desde.isoformat(), hasta.isoformat())
         dias_incumplen, peor = [], []
         dia = desde
         while dia <= hasta:
-            fuera = artefactos_fuera_servicio_en(conn, dia.isoformat())
+            fuera = fuera_servicio_el_dia(clausuras, dia.isoformat())
             detalle_dia, dia_ok = [], True
             for n in nucleos:
                 inst = instalados_por_nucleo[n["id"]]

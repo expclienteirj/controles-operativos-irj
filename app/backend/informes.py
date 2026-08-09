@@ -251,7 +251,9 @@ NOMBRE_ITEM_CERT = {
 def informe_limpieza(conn: sqlite3.Connection, periodo: str,
                      incluir_fotos: bool = True, emisor: dict | None = None) -> bytes:
     resumen = services.resumen_mensual_limpieza(conn, periodo)
-    cert = services.certificacion(conn, periodo)
+    # Se le pasa el resumen ya calculado: es el mismo período y por dentro la
+    # certificación lo rehacía entero.
+    cert = services.certificacion(conn, periodo, resumen)
     comp = resumen['completitud']
 
     inf = Informe(

@@ -45,10 +45,6 @@ class Fila(dict):
 
 _RE_INSERT = re.compile(r"^\s*INSERT\s+INTO\s+([A-Za-z_][\w]*)", re.IGNORECASE)
 
-# Tablas con columna `id`, por conexión. Se consulta una vez: el esquema no
-# cambia mientras la app corre.
-_CACHE_TABLAS_ID: dict[int, set[str]] = {}
-
 
 def _adaptar(params):
     """Convierte los booleanos de Python a 0/1, como hace SQLite.
@@ -70,15 +66,21 @@ def _tabla_insertada(sql: str) -> str | None:
     return m.group(1).lower() if m else None
 
 
-def _tablas_con_id(conn) -> set[str]:
-    clave = id(conn)
-    if clave not in _CACHE_TABLAS_ID:
-        with conn.cursor() as cur:
+def _tablas_con_id(envoltorio) -> set[str]:
+    """Tablas con columna `id`. Se consulta una vez por conexión.
+
+    La caché cuelga de la `ConexionPG` en lugar de un diccionario global
+    indexado por `id(conn)`: CPython reutiliza las direcciones de los objetos
+    liberados, así que una conexión nueva podía caer en la entrada de otra ya
+    muerta y heredar un esquema que no era el suyo.
+    """
+    if envoltorio._tablas_id is None:
+        with envoltorio._conn.cursor() as cur:
             cur.execute(
                 "SELECT table_name FROM information_schema.columns "
                 "WHERE table_schema = 'public' AND column_name = 'id'")
-            _CACHE_TABLAS_ID[clave] = {f[0].lower() for f in cur.fetchall()}
-    return _CACHE_TABLAS_ID[clave]
+            envoltorio._tablas_id = {f[0].lower() for f in cur.fetchall()}
+    return envoltorio._tablas_id
 
 
 def _fabrica_filas(cursor):
@@ -94,15 +96,15 @@ def _fabrica_filas(cursor):
 class CursorPG:
     """Cursor con la interfaz que usa el backend. `execute` devuelve el cursor."""
 
-    def __init__(self, conn):
-        self._conn = conn
-        self._cur = conn.cursor(row_factory=_fabrica_filas)
+    def __init__(self, envoltorio):
+        self._env = envoltorio
+        self._cur = envoltorio._conn.cursor(row_factory=_fabrica_filas)
         self._ultimo_id = None
 
     def execute(self, sql: str, params=()):
         sql_pg = pgcompat.traducir(sql, con_parametros=bool(params))
         tabla = _tabla_insertada(sql_pg)
-        devuelve_id = tabla is not None and tabla in _tablas_con_id(self._conn)
+        devuelve_id = tabla is not None and tabla in _tablas_con_id(self._env)
         if devuelve_id:
             sql_pg += " RETURNING id"
 
@@ -154,6 +156,7 @@ class ConexionPG:
 
     def __init__(self, dsn: str):
         self._conn = psycopg.connect(dsn)
+        self._tablas_id = None
         self._conn.autocommit = False
         # psycopg prepara automáticamente una consulta tras repetirla unas
         # pocas veces. El pooler de Supabase en modo transaction (PgBouncer,
@@ -163,10 +166,10 @@ class ConexionPG:
         self._conn.prepare_threshold = None
 
     def execute(self, sql: str, params=()):
-        return CursorPG(self._conn).execute(sql, params)
+        return CursorPG(self).execute(sql, params)
 
     def cursor(self):
-        return CursorPG(self._conn)
+        return CursorPG(self)
 
     def executescript(self, script: str):
         """Ejecuta un bloque de sentencias. Solo se usa para crear el esquema."""
