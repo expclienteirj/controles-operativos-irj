@@ -198,7 +198,15 @@
       "Read(//Users/matiasarancibia/Desktop/**)",
       "Bash(sqlite3 '/Users/matiasarancibia/Library/Application Support/com.apple.TCC/TCC.db' 'select client, auth_value from access where service='\\\\''kTCCServiceSystemPolicyAllFiles'\\\\'';')",
       "Bash(git checkout *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(curl -s -m 3 http://localhost:8080/js/ui.js)",
+      "Bash(curl -s -m 3 http://localhost:8080/js/app.js)",
+      "Bash(curl -s -m 3 http://localhost:8099/js/ui.js)",
+      "Bash(curl -s -m 15 https://controles-operativos-irj.vercel.app/js/ui.js)",
+      "Bash(curl -s -m 20 -o /tmp/ui-prod.js -w \"HTTP %{http_code}  bytes=%{size_download}\\\\n\" https://controles-operativos-irj.vercel.app/js/ui.js)",
+      "Bash(curl -s -m 20 https://controles-operativos-irj.vercel.app/sw.js)",
+      "Bash(git fetch *)",
+      "Bash(curl -s -m 20 -o /tmp/ui-prod2.js -w \"ui.js  HTTP %{http_code}  bytes=%{size_download}\\\\n\" https://controles-operativos-irj.vercel.app/js/ui.js)"
     ]
   }
 }
