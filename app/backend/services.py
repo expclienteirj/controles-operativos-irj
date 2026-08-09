@@ -2029,9 +2029,13 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
 
     parciales = mes["turnos"]["dias_parciales"]
     if parciales:
+        # A limpieza y no a la pantalla de inicio: el centro de novedades se
+        # abre casi siempre desde inicio, así que mandar ahí era repintar la
+        # pantalla donde el auditor ya estaba y el botón parecía muerto. En
+        # limpieza está el listado de días por turno, que es donde se actúa.
         agregar("turnos_faltantes", CRITICIDAD_MEDIA,
                 f"{len(parciales)} día(s) con una sola recorrida",
-                "Se exigen dos controles diarios.", "/", len(parciales))
+                "Se exigen dos controles diarios.", "/limpieza", len(parciales))
 
     if mes["cobertura"] is not None and not mes["cobertura_suficiente"]:
         agregar("cobertura", CRITICIDAD_MEDIA,
@@ -2065,7 +2069,11 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
                 f"{len(fuera)} máquina(s) fuera de servicio",
                 f"{fuera[0]['equipo']}" + (f" lleva {dias} día(s) de baja."
                                            if dias else " desde hoy.")
-                + " Descuenta del importe a certificar.", "/", len(fuera))
+                # Tampoco a inicio: el equipamiento se ve y se da de alta desde
+                # el control diario, y a él se llega por limpieza. `/config` no
+                # sirve como destino porque es solo de admin y a un auditor lo
+                # rebota a inicio, que es el problema que se está corrigiendo.
+                + " Descuenta del importe a certificar.", "/limpieza", len(fuera))
 
     # -- niveles de servicio -------------------------------------------------
     try:
