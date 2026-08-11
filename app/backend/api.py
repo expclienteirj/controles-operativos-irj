@@ -322,8 +322,18 @@ def put_asientos(ctx):
     instalados = ctx["body"].get("instalados")
     if isinstance(instalados, bool) or not isinstance(instalados, int) or instalados < 0:
         raise ErrorAPI("La cantidad de asientos debe ser un entero de 0 o más")
-    ctx["conn"].execute(
+    cur = ctx["conn"].execute(
         "UPDATE asientos_preembarque SET instalados = ? WHERE id = 1", (instalados,))
+    if not cur.rowcount:
+        # `asientos_preembarque` es de fila única y esa fila la crea el seed.
+        # `seed-supabase.sql` no la incluía, así que en Supabase la tabla quedaba
+        # vacía: el UPDATE no tocaba ninguna fila, la API respondía 200, la
+        # pantalla decía "Asientos actualizados" y el valor no se guardaba en
+        # ningún lado. Insertarla acá arregla además las bases que ya quedaron
+        # en ese estado, sin depender de que alguien corra un seed correctivo.
+        ctx["conn"].execute(
+            "INSERT INTO asientos_preembarque (id, instalados) VALUES (1, ?)",
+            (instalados,))
     services.registrar_log(ctx["conn"], ctx["sesion"]["usuario_id"],
                            "EDITAR_INVENTARIO", "asientos_preembarque", 1,
                            {"instalados": instalados})

@@ -170,3 +170,8 @@ INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_invent
 INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('10', 'pista_rodajes', 'Pista y rodajes', '10', '1', 'MENSUAL', 'secciones_pavimento') ON CONFLICT DO NOTHING;
 INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('11', 'pasarelas', 'Pasarelas telescópicas', '11', '0', 'MENSUAL', NULL) ON CONFLICT DO NOTHING;
 SELECT setval(pg_get_serial_sequence('los_items','id'), COALESCE((SELECT MAX(id) FROM los_items),1), true);
+
+-- asientos_preembarque: 1 fila(s)
+-- Tabla de fila unica. Sin esta fila el UPDATE del endpoint no toca nada y la
+-- carga de asientos se pierde en silencio.
+INSERT INTO asientos_preembarque (id, instalados) VALUES (1, 0) ON CONFLICT DO NOTHING;

@@ -906,6 +906,38 @@ class TestConfiguracion(TestAPI):
         codigo, _ = self.admin("PUT", "/api/inventario/asientos", {"instalados": -5})
         self.assertEqual(codigo, 400)
 
+    def test_asientos_se_guardan_con_la_tabla_vacia(self):
+        """La fila única puede no existir: igual tiene que guardar.
+
+        `seed-supabase.sql` no insertaba la fila id=1, así que en producción la
+        tabla quedaba vacía y el UPDATE del endpoint no tocaba nada: respondía
+        200, la pantalla decía "Asientos actualizados" y el valor no se guardaba.
+        Se reproduce vaciando la tabla, que es el estado exacto de esa base.
+        """
+        conn = db.conectar()
+        conn.execute("DELETE FROM asientos_preembarque")
+        conn.commit()
+        conn.close()
+
+        codigo, _ = self.admin("PUT", "/api/inventario/asientos", {"instalados": 41})
+        self.assertEqual(codigo, 200)
+
+        # Lo que importa no es el 200 sino que el dato haya quedado guardado.
+        _, leido = self.admin("GET", "/api/inventario/asientos")
+        self.assertEqual(leido["instalados"], 41)
+
+    def test_asientos_se_actualizan_si_la_fila_ya_existe(self):
+        """El camino normal no puede haberse roto al cubrir el otro."""
+        self.admin("PUT", "/api/inventario/asientos", {"instalados": 30})
+        self.admin("PUT", "/api/inventario/asientos", {"instalados": 55})
+        _, leido = self.admin("GET", "/api/inventario/asientos")
+        self.assertEqual(leido["instalados"], 55)
+
+        conn = db.conectar()
+        filas = conn.execute("SELECT COUNT(*) c FROM asientos_preembarque").fetchone()
+        conn.close()
+        self.assertEqual(filas["c"], 1)     # sigue siendo de fila única
+
     def test_toggle_de_item_los(self):
         codigo, r = self.admin("PUT", "/api/los/items/pasarelas", {"aplica": True})
         self.assertEqual(codigo, 200)
