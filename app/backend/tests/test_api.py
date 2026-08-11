@@ -938,6 +938,44 @@ class TestConfiguracion(TestAPI):
         conn.close()
         self.assertEqual(filas["c"], 1)     # sigue siendo de fila única
 
+    def test_operar_sobre_un_id_inexistente_da_404(self):
+        """Ningún endpoint puede responder éxito sin haber cambiado nada.
+
+        Un UPDATE que no encuentra su fila no es un error de SQL: afecta cero
+        filas y el commit confirma nada. Tres de estos cuatro mueven la fórmula
+        de certificación (equipamiento → maquinarias, insumos → insumos,
+        reabrir → calidad de servicio), así que un OK falso es un cambio de
+        importe que la app da por hecho y no ocurrió.
+        """
+        casos = [
+            ("PUT", "/api/equipamiento/999999", {"exigido": True}),
+            ("PUT", "/api/insumos/999999", {"punto_pedido": 5}),
+            ("POST", "/api/los/relevamientos/999999/cerrar", {}),
+            ("POST", "/api/controles/999999/reabrir", {"motivo": "prueba"}),
+            ("POST", "/api/los/relevamientos/999999/reabrir", {"motivo": "prueba"}),
+        ]
+        for metodo, ruta, cuerpo in casos:
+            with self.subTest(ruta=ruta):
+                codigo, _ = self.admin(metodo, ruta, cuerpo)
+                self.assertEqual(codigo, 404, f"{metodo} {ruta} no devolvió 404")
+
+    def test_reabrir_inexistente_no_deja_rastro_en_auditoria(self):
+        """El historial es la defensa del auditor: no puede contener actos falsos."""
+        conn = db.conectar()
+        antes = conn.execute(
+            "SELECT COUNT(*) c FROM auditoria_log WHERE accion = 'REABRIR_CONTROL'"
+        ).fetchone()["c"]
+        conn.close()
+
+        self.admin("POST", "/api/controles/999999/reabrir", {"motivo": "prueba"})
+
+        conn = db.conectar()
+        despues = conn.execute(
+            "SELECT COUNT(*) c FROM auditoria_log WHERE accion = 'REABRIR_CONTROL'"
+        ).fetchone()["c"]
+        conn.close()
+        self.assertEqual(antes, despues)
+
     def test_toggle_de_item_los(self):
         codigo, r = self.admin("PUT", "/api/los/items/pasarelas", {"aplica": True})
         self.assertEqual(codigo, 200)

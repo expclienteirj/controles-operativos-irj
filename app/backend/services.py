@@ -720,6 +720,14 @@ def reabrir_control(conn: sqlite3.Connection, control_id: int, usuario_id: int,
     """Solo admin. El historial es inmutable salvo por esta vía, que queda logueada."""
     if not (motivo or "").strip():
         raise ValueError("Reabrir un control cerrado exige un motivo")
+    # Reabrir saca al control del promedio mensual —que solo cuenta los
+    # CERRADO—, así que mueve el ítem de calidad de servicio y con él el importe
+    # a certificar. Sobre un id inexistente el UPDATE no hacía nada y la
+    # operación quedaba igual registrada en el log: un cambio de importe
+    # aparentemente autorizado que nunca sucedió.
+    if not conn.execute("SELECT id FROM controles_limpieza WHERE id = ?",
+                        (control_id,)).fetchone():
+        raise LookupError(f"No existe el control {control_id}")
     conn.execute("UPDATE controles_limpieza SET estado = 'ABIERTO', cerrado_en = NULL "
                  "WHERE id = ?", (control_id,))
     registrar_log(conn, usuario_id, "REABRIR_CONTROL", "controles_limpieza", control_id,
@@ -1693,6 +1701,11 @@ def reabrir_relevamiento_los(conn: sqlite3.Connection, relevamiento_id: int,
     historial es inmutable salvo por esta vía, que queda logueada."""
     if not (motivo or "").strip():
         raise ValueError("Reabrir un relevamiento cerrado exige un motivo")
+    # Mismo criterio que reabrir un control: no mueve números, pero no puede
+    # quedar en el log una reapertura que no ocurrió.
+    if not conn.execute("SELECT id FROM relevamientos_los WHERE id = ?",
+                        (relevamiento_id,)).fetchone():
+        raise LookupError(f"No existe el relevamiento {relevamiento_id}")
     conn.execute(
         "UPDATE relevamientos_los SET estado = 'ABIERTO', cerrado_en = NULL "
         "WHERE id = ?", (relevamiento_id,))

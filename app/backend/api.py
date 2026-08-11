@@ -396,6 +396,16 @@ def editar_equipamiento(ctx, id_):
     if not campos:
         raise ErrorAPI("Nada para actualizar")
 
+    # `exigido` entra en el ítem 4 de la certificación vía `equipos_exigidos`.
+    # Sin esta verificación, editar un equipo borrado devolvía 200 y no cambiaba
+    # nada: la app daba por hecho un cambio en el cálculo del importe que nunca
+    # ocurrió. Es escenario real porque el equipamiento se puede borrar y la
+    # tablet reenvía desde la cola operaciones armadas antes de ese borrado.
+    if not ctx["conn"].execute(
+            "SELECT id FROM equipamiento_limpieza WHERE id = ?",
+            (int(id_),)).fetchone():
+        raise ErrorAPI(f"No existe el equipo {id_}", 404)
+
     ctx["conn"].execute(
         f"UPDATE equipamiento_limpieza SET {', '.join(f'{c} = ?' for c in campos)} "
         "WHERE id = ?", (*campos.values(), int(id_)))
@@ -448,6 +458,14 @@ def editar_insumo(ctx, id_):
             campos[c] = ctx["body"][c]
     if not campos:
         raise ErrorAPI("Nada para actualizar")
+
+    # `activo` decide qué insumos entran al ítem 5 de la certificación y
+    # `punto_pedido` es el umbral contra el que se los mide: un UPDATE que no
+    # afecta ninguna fila es un cambio de cálculo que la app cree hecho.
+    if not ctx["conn"].execute(
+            "SELECT id FROM insumos WHERE id = ?", (int(id_),)).fetchone():
+        raise ErrorAPI(f"No existe el insumo {id_}", 404)
+
     ctx["conn"].execute(
         f"UPDATE insumos SET {', '.join(f'{c} = ?' for c in campos)} WHERE id = ?",
         (*campos.values(), int(id_)))
@@ -1039,6 +1057,15 @@ def crear_medicion(ctx, relevamiento_id):
 
 @ruta("POST", r"/api/los/relevamientos/(\d+)/cerrar")
 def cerrar_relevamiento(ctx, relevamiento_id):
+    # Cerrar un relevamiento que no existe no cambiaba ningún número —el estado
+    # del relevamiento no entra en los cálculos— pero sí escribía en el log de
+    # auditoría un cierre que nunca pasó. El historial es la defensa del auditor
+    # si se discute un importe: no puede contener actos que no ocurrieron.
+    if not ctx["conn"].execute(
+            "SELECT id FROM relevamientos_los WHERE id = ?",
+            (int(relevamiento_id),)).fetchone():
+        raise ErrorAPI(f"No existe el relevamiento {relevamiento_id}", 404)
+
     ctx["conn"].execute(
         "UPDATE relevamientos_los SET estado = 'CERRADO', cerrado_en = datetime('now') "
         "WHERE id = ?", (int(relevamiento_id),))
