@@ -294,7 +294,11 @@ LOS_ITEMS = [
     ("asientos_preembarque", "Asientos en preembarque", 5, True, "DIARIO",
      "asientos_preembarque"),
     ("puntos_carga", "Puntos de carga", 6, True, "DIARIO", "puertas_embarque"),
-    ("medios_elevacion", "Medios de elevación", 7, True, "POR_EVENTO",
+    # IRJ no tiene ascensores ni escaleras mecánicas en la terminal (confirmado
+    # por operaciones, 2026-08-11). Mismo criterio que pasarelas: la estructura
+    # queda implementada por si el aeropuerto suma equipos, pero el ítem no
+    # rige, así que no exige inventario ni entra en el resultado LoS.
+    ("medios_elevacion", "Medios de elevación", 7, False, "POR_EVENTO",
      "medios_elevacion"),
     ("limpieza_terminal", "Limpieza de terminal", 8, True, "DERIVADO", None),
     ("gel", "Grupos electrógenos (GEL)", 9, True, "MENSUAL", None),

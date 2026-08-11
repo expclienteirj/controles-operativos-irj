@@ -164,7 +164,7 @@ INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_invent
 INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('4', 'infraestructura', 'Estado de infraestructura', '4', '1', 'DIARIO', NULL) ON CONFLICT DO NOTHING;
 INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('5', 'asientos_preembarque', 'Asientos en preembarque', '5', '1', 'DIARIO', 'asientos_preembarque') ON CONFLICT DO NOTHING;
 INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('6', 'puntos_carga', 'Puntos de carga', '6', '1', 'DIARIO', 'puertas_embarque') ON CONFLICT DO NOTHING;
-INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('7', 'medios_elevacion', 'Medios de elevación', '7', '1', 'POR_EVENTO', 'medios_elevacion') ON CONFLICT DO NOTHING;
+INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('7', 'medios_elevacion', 'Medios de elevación', '7', '0', 'POR_EVENTO', 'medios_elevacion') ON CONFLICT DO NOTHING;
 INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('8', 'limpieza_terminal', 'Limpieza de terminal', '8', '1', 'DERIVADO', NULL) ON CONFLICT DO NOTHING;
 INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('9', 'gel', 'Grupos electrógenos (GEL)', '9', '1', 'MENSUAL', NULL) ON CONFLICT DO NOTHING;
 INSERT INTO los_items (id,clave,nombre,orden,aplica,periodicidad,requiere_inventario) VALUES ('10', 'pista_rodajes', 'Pista y rodajes', '10', '1', 'MENSUAL', 'secciones_pavimento') ON CONFLICT DO NOTHING;

@@ -631,8 +631,8 @@ class TestLoSAPI(TestAPI):
     def test_dashboard_los(self):
         codigo, d = self.auditor("GET", "/api/los/dashboard?periodo=2031-04")
         self.assertEqual(codigo, 200)
-        self.assertEqual(d["no_aplica"], ["pasarelas"])
-        self.assertEqual(d["items_aplicables"], 10)
+        self.assertEqual(d["no_aplica"], ["medios_elevacion", "pasarelas"])
+        self.assertEqual(d["items_aplicables"], 9)
 
     def test_medicion_de_item_inexistente(self):
         _, rel = self.auditor("POST", "/api/los/relevamientos", {"periodo": "2031-05"})
@@ -813,11 +813,44 @@ class TestConfiguracion(TestAPI):
     def test_onboarding_reporta_lo_que_falta(self):
         codigo, r = self.admin("GET", "/api/onboarding")
         self.assertEqual(codigo, 200)
-        self.assertEqual(r["total"], 6)
+        # Seis bloques, pero solo cinco exigibles: IRJ no tiene medios de
+        # elevación, así que ese inventario no se reclama.
+        self.assertEqual(r["total"], 5)
         self.assertIn("pasos", r)
         claves = {p["clave"] for p in r["pasos"]}
         self.assertEqual(claves, {"nucleos", "luminarias", "asientos",
                                   "puertas", "elevacion", "secciones"})
+        elevacion = next(p for p in r["pasos"] if p["clave"] == "elevacion")
+        self.assertFalse(elevacion["aplica"])
+
+    def test_onboarding_no_queda_trabado_por_un_bloque_que_no_aplica(self):
+        """El bug: un inventario que no corresponde impedía terminar, para siempre.
+
+        `medios_elevacion` no rige en IRJ y su tabla está vacía. Antes el paso
+        contaba igual, así que `terminado` no podía llegar nunca a true y el
+        mosaico de Configuración mostraba "falta cargar 1 bloque" de forma
+        permanente, sin nada que el admin pudiera hacer. Y la misma respuesta
+        se contradecía: `items_bloqueados` venía vacío.
+        """
+        for recurso, cuerpo in (
+                ("nucleos", {"nombre": "Damas", "tipo": "DAMAS",
+                             "equipos": {"inodoros": 2}}),
+                ("luminarias", {"sector": "Hall", "cantidad": 10}),
+                ("puertas", {"nombre": "P1", "php": 80, "instaladas": 20}),
+                ("secciones", {"identificador": "RWY-09", "tipo": "PISTA"})):
+            self.admin("POST", f"/api/inventario/{recurso}", cuerpo)
+        self.admin("PUT", "/api/inventario/asientos", {"instalados": 40})
+
+        _, r = self.admin("GET", "/api/onboarding")
+        self.assertEqual(r["items_bloqueados"], [])
+        self.assertTrue(r["terminado"],
+                        f"quedó trabado con los pasos: {r['pasos']}")
+        self.assertEqual(r["progreso"], 1.0)
+
+        # El bloque sigue visible y cargable: el aeropuerto podría sumar equipos.
+        elevacion = next(p for p in r["pasos"] if p["clave"] == "elevacion")
+        self.assertFalse(elevacion["aplica"])
+        self.assertFalse(elevacion["completo"])
 
     def test_onboarding_avanza_al_cargar_inventario(self):
         _, antes = self.admin("GET", "/api/onboarding")

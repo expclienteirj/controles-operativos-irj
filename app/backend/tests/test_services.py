@@ -1063,7 +1063,20 @@ class TestLoS(Base):
             self.conn, "puntos_carga", {"fuera_servicio": {pid: 2}}, PERIODO)["cumple"])
 
     # -- 3.7 elevación ------------------------------------------------------
+    def _habilitar_elevacion(self):
+        """IRJ no tiene ascensores ni escaleras, así que el ítem viene NO APLICA.
+
+        Estos tests miden la matemática del ítem —acumulado de horas contra el
+        tope mensual—, no su aplicabilidad, así que lo habilitan a propósito.
+        Sin esto `evaluar_item_los` corta antes y devuelve cumple=None, que
+        vuelve vacías las aserciones en lugar de fallar.
+        """
+        self.conn.execute(
+            "UPDATE los_items SET aplica = 1 WHERE clave = 'medios_elevacion'")
+        self.conn.commit()
+
     def test_elevacion_acumula_eventos_del_mes(self):
+        self._habilitar_elevacion()
         cur = self.conn.execute(
             "INSERT INTO medios_elevacion (nombre, redundancia) VALUES ('Ascensor 1', 0)")
         eid = cur.lastrowid
@@ -1077,6 +1090,7 @@ class TestLoS(Base):
         self.assertTrue(r["cumple"])
 
     def test_elevacion_supera_tope_mensual(self):
+        self._habilitar_elevacion()
         cur = self.conn.execute(
             "INSERT INTO medios_elevacion (nombre, redundancia) VALUES ('Ascensor 1', 0)")
         self.conn.execute(
@@ -1084,7 +1098,23 @@ class TestLoS(Base):
             "VALUES (?,?,'2026-07-01 08:00',60)", (cur.lastrowid, PERIODO))
         self.conn.commit()
         r = services.evaluar_item_los(self.conn, "medios_elevacion", {}, PERIODO)
-        self.assertFalse(r["cumple"])
+        # `assertIs(..., False)` y no `assertFalse`: un None también pasaría el
+        # segundo, y un ítem que no se evalúa devuelve exactamente None. Con el
+        # ítem en NO APLICA esta aserción quedó vacía sin que nadie lo notara.
+        self.assertIs(r["cumple"], False)
+
+    def test_elevacion_que_no_aplica_no_se_evalua(self):
+        """Con el ítem en NO APLICA no hay condición que verificar, ni siquiera
+        con eventos cargados: no es que cumpla, es que no corresponde."""
+        cur = self.conn.execute(
+            "INSERT INTO medios_elevacion (nombre, redundancia) VALUES ('Ascensor 1', 0)")
+        self.conn.execute(
+            "INSERT INTO elevacion_eventos (equipo_id, periodo, inicio, horas) "
+            "VALUES (?,?,'2026-07-01 08:00',600)", (cur.lastrowid, PERIODO))
+        self.conn.commit()
+        r = services.evaluar_item_los(self.conn, "medios_elevacion", {}, PERIODO)
+        self.assertIsNone(r["cumple"])
+        self.assertTrue(r["no_aplica"])
 
     # -- 3.2 / 3.9 mediciones obligatorias ---------------------------------
     def test_confort_sin_medicion_es_sin_datos(self):
@@ -1187,9 +1217,10 @@ class TestLoS(Base):
     def test_dashboard_sin_relevamientos(self):
         d = services.dashboard_los(self.conn, PERIODO)
         self.assertIsNone(d["porcentaje"])
-        self.assertEqual(d["no_aplica"], ["pasarelas"])
-        self.assertEqual(d["items_aplicables"], 10)
-        self.assertEqual(len(d["requieren_configuracion"]), 6)
+        # IRJ no tiene mangas ni medios de elevación.
+        self.assertEqual(d["no_aplica"], ["medios_elevacion", "pasarelas"])
+        self.assertEqual(d["items_aplicables"], 9)
+        self.assertEqual(len(d["requieren_configuracion"]), 5)
 
     def test_dashboard_calcula_porcentaje_global(self):
         r_id = self._relevamiento()

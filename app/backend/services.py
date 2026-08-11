@@ -1848,17 +1848,33 @@ def estado_onboarding(conn: sqlite3.Connection) -> dict:
          "descripcion": "Identificador de cada sección, para la carga de PCI.",
          "items_los": ["pista_rodajes"], "cargados": _contar("secciones_pavimento")},
     ]
+    # Un bloque de inventario solo se exige si alguno de los ítems LoS que
+    # alimenta rige en este aeropuerto. IRJ no tiene mangas ni medios de
+    # elevación: pedir su inventario dejaba el onboarding en "falta cargar 1
+    # bloque" para siempre, sin nada que el admin pudiera hacer al respecto.
+    # `inventario_pendiente` ya filtraba por `aplica`, así que la respuesta se
+    # contradecía a sí misma: ningún ítem bloqueado y el progreso incompleto.
+    rige = {f["clave"]: bool(f["aplica"]) for f in conn.execute(
+        "SELECT clave, aplica FROM los_items")}
     for p in pasos:
+        p["aplica"] = any(rige.get(i, True) for i in p["items_los"])
         p["completo"] = p["cargados"] > 0
 
-    completos = [p for p in pasos if p["completo"]]
+    aplicables = [p for p in pasos if p["aplica"]]
+    completos = [p for p in aplicables if p["completo"]]
     return {
         "pasos": pasos,
         "completos": len(completos),
-        "total": len(pasos),
-        "terminado": len(completos) == len(pasos),
-        "progreso": len(completos) / len(pasos),
+        "total": len(aplicables),
+        "terminado": len(completos) == len(aplicables),
+        # Sin bloques aplicables no hay nada que configurar, y eso es el 100%:
+        # una división por cero acá dejaría la app sin arrancar.
+        "progreso": len(completos) / len(aplicables) if aplicables else 1.0,
         "items_bloqueados": [p["item"] for p in db.inventario_pendiente(conn)],
+        # Cuántos ítems LoS rigen. La pantalla lo anunciaba con un número
+        # escrito a mano —"los 11 ítems"— que dejaba de ser cierto en cuanto
+        # se marcaba uno como no aplicable.
+        "items_los_aplicables": sum(1 for v in rige.values() if v),
     }
 
 

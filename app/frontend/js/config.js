@@ -140,12 +140,18 @@ const Config = (() => {
    */
   function bannerOnboarding() {
     if (!onboarding || onboarding.terminado) {
+      // El número lo dice el servidor: escrito a mano dejaba de ser cierto en
+      // cuanto se marcaba un ítem como no aplicable.
+      const n = onboarding && onboarding.items_los_aplicables;
       return `<div class="aviso info">
         <strong>Configuración inicial completa</strong>
-        Los 11 ítems del módulo LoS están habilitados para relevamiento.
+        ${n ? `Los ${n} ítems del módulo LoS que rigen en este aeropuerto están
+               habilitados para relevamiento.`
+            : 'Los ítems del módulo LoS están habilitados para relevamiento.'}
       </div>`;
     }
-    const faltan = onboarding.pasos.filter((p) => !p.completo);
+    // Los bloques que no aplican no son faltantes: no hay nada que cargar.
+    const faltan = onboarding.pasos.filter((p) => !p.completo && p.aplica !== false);
     const pct = Math.round(onboarding.progreso * 100);
     return `
       <div class="tarjeta" style="border-left:4px solid var(--amarillo)">
@@ -203,11 +209,18 @@ const Config = (() => {
   /* ====================================================== tab Inventario === */
 
   async function panelInventario(panel, layout, ir) {
-    const [asientos, ...listas] = await Promise.all([
+    const [asientos, estado, ...listas] = await Promise.all([
       API.get('/api/inventario/asientos').catch(() => null),
+      API.get('/api/onboarding').catch(() => null),
       ...Object.keys(RECURSOS).map((r) =>
         API.get(`/api/inventario/${r}`).then((x) => ({ recurso: r, datos: x[r] }))),
     ]);
+
+    // Qué bloques rigen en este aeropuerto. El mapeo recurso → ítem LoS ya lo
+    // resuelve el servidor para el onboarding: se reusa en lugar de mantener
+    // una segunda copia acá, que es como se desincronizan estas cosas.
+    const rige = {};
+    for (const p of (estado && estado.pasos) || []) rige[p.clave] = p.aplica !== false;
 
     // Las zonas de medición térmica son inventario, no un parámetro: son los
     // lugares físicos donde el auditor toma la temperatura. Los umbrales de
@@ -216,7 +229,8 @@ const Config = (() => {
     const cfg = await cargarConfig();
 
     panel.innerHTML = `
-      ${listas.map((l) => bloqueRecurso(l.recurso, l.datos)).join('')}
+      ${listas.map((l) => bloqueRecurso(l.recurso, l.datos,
+                                        rige[l.recurso] !== false)).join('')}
       ${bloqueAsientos()}
       <div class="tarjeta">
         <h2>Zonas de medición térmica</h2>
@@ -258,8 +272,39 @@ const Config = (() => {
     });
   }
 
-  function bloqueRecurso(recurso, datos) {
+  /**
+   * Tarjeta de un recurso de inventario.
+   *
+   * `aplica`: si el ítem LoS que alimenta rige en este aeropuerto. Cuando no
+   * rige, el bloque no reclama nada: exigir el inventario de algo que el
+   * aeropuerto no tiene —IRJ no tiene mangas ni medios de elevación— es pedir
+   * una carga imposible para satisfacer una condición que no existe. Se sigue
+   * mostrando, y se puede cargar igual, porque el ítem puede volver a regir.
+   */
+  function bloqueRecurso(recurso, datos, aplica = true) {
     const meta = RECURSOS[recurso];
+    if (!aplica) {
+      return `<div class="tarjeta">
+        <h2>${UI.esc(meta.titulo)}</h2>
+        <div class="aviso info" style="margin:0 0 12px">
+          <strong>No aplica en este aeropuerto</strong>
+          El ítem LoS asociado está marcado como no aplicable, así que no exige
+          inventario ni entra en el resultado. Se cambia en Parámetros.
+        </div>
+        ${datos.length ? `<div class="lista-items">${datos.map((d) => {
+          const { titulo, detalle } = meta.fila(d);
+          return `<div class="item">
+            <span class="texto">
+              <span class="nombre-item">${UI.esc(titulo)}</span>
+              <span class="obs">${UI.esc(detalle)}</span>
+            </span>
+            <button class="btn-mini peligro" data-recurso="${recurso}"
+                    data-borrar="${d.id}"
+                    data-nombre="${UI.esc(titulo)}">Borrar</button>
+          </div>`;
+        }).join('')}</div>` : ''}
+      </div>`;
+    }
     const filas = datos.length
       ? datos.map((d) => {
           const { titulo, detalle } = meta.fila(d);

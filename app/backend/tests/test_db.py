@@ -52,7 +52,9 @@ class TestSeed(BaseEnMemoria):
     def test_el_resto_de_los_items_aplica(self):
         n = self.conn.execute(
             "SELECT COUNT(*) c FROM los_items WHERE aplica = 1").fetchone()["c"]
-        self.assertEqual(n, 10)
+        # 11 ítems menos pasarelas y medios de elevación: IRJ no tiene
+        # mangas ni ascensores/escaleras mecánicas.
+        self.assertEqual(n, 9)
 
     def test_seis_equipos_de_limpieza_exigidos(self):
         n = self.conn.execute(
@@ -138,8 +140,9 @@ class TestInventarioVacio(BaseEnMemoria):
 
     def test_items_cuantitativos_reportados_como_pendientes(self):
         pend = {p["item"] for p in db.inventario_pendiente(self.conn)}
+        # medios_elevacion no está: no aplica, así que no exige inventario.
         self.assertEqual(pend, {"banos", "iluminacion", "asientos_preembarque",
-                                "puntos_carga", "medios_elevacion", "pista_rodajes"})
+                                "puntos_carga", "pista_rodajes"})
 
     def test_item_deja_de_estar_pendiente_al_cargar_inventario(self):
         self.conn.execute(
