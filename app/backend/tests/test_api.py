@@ -1,5 +1,6 @@
 """Tests de la API: se levanta un servidor real y se le pega por HTTP."""
 
+import hashlib
 import json
 import os
 import shutil
@@ -937,6 +938,28 @@ class TestConfiguracion(TestAPI):
         filas = conn.execute("SELECT COUNT(*) c FROM asientos_preembarque").fetchone()
         conn.close()
         self.assertEqual(filas["c"], 1)     # sigue siendo de fila única
+
+    def test_version_es_publica_y_no_expone_el_commit(self):
+        """Tiene que responder sin token: se usa para confirmar un despliegue."""
+        codigo, datos = self.pedir("GET", "/api/version")   # sin token
+        self.assertEqual(codigo, 200)
+
+        self.assertEqual(set(datos), {"firma", "entorno"})
+        self.assertEqual(datos["entorno"], "local")     # sin VERCEL_ENV
+        self.assertEqual(datos["firma"], "local")       # sin commit desplegado
+
+    def test_version_publica_el_hash_y_nunca_el_commit(self):
+        sha = "a" * 40
+        os.environ["VERCEL_GIT_COMMIT_SHA"] = sha
+        try:
+            firma = api.firma_version()
+        finally:
+            del os.environ["VERCEL_GIT_COMMIT_SHA"]
+
+        self.assertNotIn(firma, sha)                    # no es un prefijo del sha
+        self.assertNotIn(firma, ("", "local"))
+        self.assertEqual(firma, hashlib.sha256(sha.encode()).hexdigest()[:12])
+        self.assertEqual(len(firma), 12)
 
     def test_operar_sobre_un_id_inexistente_da_404(self):
         """Ningún endpoint puede responder éxito sin haber cambiado nada.

@@ -10,6 +10,7 @@ Los tokens se pierden al reiniciar el proceso; la PWA reintenta el login.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import mimetypes
 import os
@@ -156,6 +157,41 @@ def cambiar_password(ctx):
     services.registrar_log(ctx["conn"], ctx["sesion"]["usuario_id"], "CAMBIO_PASSWORD")
     ctx["conn"].commit()
     return {"ok": True}
+
+
+# ------------------------------------------------------------------- versión --
+
+def firma_version() -> str:
+    """Identificador opaco y estable de la versión desplegada.
+
+    Responde a una pregunta que hasta ahora no tenía forma objetiva de
+    contestarse: ¿qué código está corriendo en producción? Un cambio que solo
+    toca el backend no deja ninguna huella descargable, así que después de
+    publicar no había manera de distinguir "ya salió" de "todavía no".
+
+    Se publica el **hash** del commit, no el commit. sha256 no es reversible y
+    el espacio de un sha de git es de 160 bits, así que el valor no revela nada
+    del repositorio, pero cambia exactamente cuando cambia lo desplegado. Para
+    verificar desde afuera se compara contra el mismo hash calculado sobre el
+    commit local:
+
+        python3 -c "import hashlib,subprocess as s; \\
+          print(hashlib.sha256(s.check_output(['git','rev-parse','HEAD']).strip()).hexdigest()[:12])"
+
+    Fuera de Vercel no hay commit y devuelve 'local', que es la verdad.
+    """
+    sha = os.environ.get("VERCEL_GIT_COMMIT_SHA", "")
+    return hashlib.sha256(sha.encode()).hexdigest()[:12] if sha else "local"
+
+
+@ruta("GET", r"/api/version", rol="publico")
+def version(ctx):
+    """Pública a propósito: sirve para confirmar un despliegue sin credenciales.
+
+    No expone el commit ni ningún dato del repositorio ni de la operación.
+    """
+    return {"firma": firma_version(),
+            "entorno": os.environ.get("VERCEL_ENV", "local")}
 
 
 # ------------------------------------------------------------ configuración --
