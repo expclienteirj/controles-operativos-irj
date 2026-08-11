@@ -944,9 +944,38 @@ class TestConfiguracion(TestAPI):
         codigo, datos = self.pedir("GET", "/api/version")   # sin token
         self.assertEqual(codigo, 200)
 
-        self.assertEqual(set(datos), {"firma", "entorno"})
+        self.assertEqual(set(datos),
+                         {"firma", "entorno", "estructura_ok", "problemas"})
         self.assertEqual(datos["entorno"], "local")     # sin VERCEL_ENV
         self.assertEqual(datos["firma"], "local")       # sin commit desplegado
+        self.assertTrue(datos["estructura_ok"])         # base de prueba sana
+        self.assertEqual(datos["problemas"], [])
+
+    def test_version_detecta_la_fila_unica_faltante(self):
+        """El chequeo tiene que ver el bug que se nos escapó en producción."""
+        conn = db.conectar()
+        conn.execute("DELETE FROM asientos_preembarque")
+        conn.commit()
+        conn.close()
+        try:
+            _, datos = self.pedir("GET", "/api/version")
+            self.assertFalse(datos["estructura_ok"])
+            self.assertIn("asientos_preembarque: falta la fila única",
+                          datos["problemas"])
+        finally:
+            conn = db.conectar()
+            conn.execute("INSERT INTO asientos_preembarque (id, instalados) "
+                         "VALUES (1, 0)")
+            conn.commit()
+            conn.close()
+
+    def test_version_no_filtra_datos_de_la_operacion(self):
+        """Es pública: solo puede decir qué falta, nunca qué hay."""
+        _, datos = self.pedir("GET", "/api/version")
+        crudo = json.dumps(datos)
+        for prohibido in ("controles", "desvios", "fotos", "usuarios",
+                          "no_conformidades", "auditoria_log"):
+            self.assertNotIn(prohibido, crudo)
 
     def test_version_publica_el_hash_y_nunca_el_commit(self):
         sha = "a" * 40

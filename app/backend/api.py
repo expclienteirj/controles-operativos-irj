@@ -184,14 +184,51 @@ def firma_version() -> str:
     return hashlib.sha256(sha.encode()).hexdigest()[:12] if sha else "local"
 
 
+# Filas que el código da por existentes. `asientos_preembarque` es de fila única
+# —el esquema lo fuerza con CHECK (id = 1)— y su ausencia no rompe nada de
+# forma visible: hace que un UPDATE no encuentre a quién actualizar. Así se
+# perdió en silencio la carga de asientos en producción durante semanas.
+FILAS_UNICAS = ("asientos_preembarque",)
+
+# Catálogos que el seed tiene que dejar poblados. Vacíos no producen un error:
+# producen cálculos sobre nada, que es peor.
+CATALOGOS_SEMBRADOS = ("sectores_limpieza", "items_limpieza",
+                       "equipamiento_limpieza", "los_items", "config")
+
+
+def chequeos_estructurales(conn) -> list[str]:
+    """Problemas de estructura de la base, en lenguaje llano.
+
+    Verifica lo que el código da por sentado y nadie comprueba al desplegar.
+    Devuelve solo nombres de tablas y qué les falta: ni datos de la operación,
+    ni conteos, ni nada que sirva a un tercero.
+    """
+    problemas = []
+    for tabla in FILAS_UNICAS:
+        fila = conn.execute(f"SELECT COUNT(*) c FROM {tabla}").fetchone()
+        if not fila["c"]:
+            problemas.append(f"{tabla}: falta la fila única")
+    for tabla in CATALOGOS_SEMBRADOS:
+        fila = conn.execute(f"SELECT COUNT(*) c FROM {tabla}").fetchone()
+        if not fila["c"]:
+            problemas.append(f"{tabla}: sin sembrar")
+    return problemas
+
+
 @ruta("GET", r"/api/version", rol="publico")
 def version(ctx):
-    """Pública a propósito: sirve para confirmar un despliegue sin credenciales.
+    """Pública a propósito: confirma un despliegue y su salud sin credenciales.
 
-    No expone el commit ni ningún dato del repositorio ni de la operación.
+    No expone el commit, ni datos de la operación, ni nada del repositorio.
+
+    Que esta ruta responda 200 ya prueba que la base está accesible: la conexión
+    se abre antes de despachar cualquier petición.
     """
+    problemas = chequeos_estructurales(ctx["conn"])
     return {"firma": firma_version(),
-            "entorno": os.environ.get("VERCEL_ENV", "local")}
+            "entorno": os.environ.get("VERCEL_ENV", "local"),
+            "estructura_ok": not problemas,
+            "problemas": problemas}
 
 
 # ------------------------------------------------------------ configuración --
