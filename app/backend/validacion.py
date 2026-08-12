@@ -234,7 +234,9 @@ VALIDADORES = {
 
     # certificación
     "pesos": _pesos_certificacion,
+    "penalizacion_nc_activa": _booleano,
     "penalizacion_por_nc": _proporcion,
+    "penalizacion_nc_tope_activo": _booleano,
     "penalizacion_nc_tope": _proporcion,
     "penalizacion_nc_confirmada": _booleano,
 }

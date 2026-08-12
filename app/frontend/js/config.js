@@ -503,16 +503,34 @@ const Config = (() => {
       <div class="tarjeta">
         <h2>Penalización por no conformidad</h2>
         <div class="aviso advertencia">
-          <strong>Valor provisorio, no surge del pliego</strong>
+          <strong>No surge del pliego</strong>
           El PET indica que la calidad se ajusta por la cantidad de no
-          conformidades pero no fija la fórmula. Acordá el criterio con el
-          contratista y marcá la casilla de confirmado.
+          conformidades pero no fija la fórmula. Por eso el descuento viene
+          <strong>desactivado</strong>: las NC se registran e informan, pero no
+          bajan el importe. Activalo solo si se negocia un criterio con el
+          contratista, y marcá la casilla de confirmado.
         </div>
+        ${campoConfig({ clave: 'penalizacion_nc_activa', tipo: 'booleano',
+                        etiqueta: 'Aplicar descuento por no conformidades',
+                        ayuda: 'Desactivado, las NC se registran e informan '
+                             + 'pero no descuentan del importe. Activar solo '
+                             + 'si se acordó un criterio con el contratista: '
+                             + 'el pliego no fija ninguna fórmula.' },
+                      cfg.penalizacion_nc_activa)}
         ${campoConfig({ clave: 'penalizacion_por_nc', tipo: 'porcentaje',
-                        etiqueta: 'Descuento por cada NC abierta' },
+                        etiqueta: 'Descuento por cada NC abierta',
+                        ayuda: 'Solo se aplica si el descuento está activado.' },
                       cfg.penalizacion_por_nc)}
+        ${campoConfig({ clave: 'penalizacion_nc_tope_activo', tipo: 'booleano',
+                        etiqueta: 'Aplicar un tope al descuento acumulado',
+                        ayuda: 'Desactivado, el descuento crece con cada NC. '
+                             + 'Con tope, en cuanto se alcanza deja de '
+                             + 'distinguir un mes de otro: como cada desvío '
+                             + 'genera una NC, cualquier mes real lo alcanza.' },
+                      cfg.penalizacion_nc_tope_activo)}
         ${campoConfig({ clave: 'penalizacion_nc_tope', tipo: 'porcentaje',
-                        etiqueta: 'Tope acumulado del descuento' },
+                        etiqueta: 'Tope acumulado del descuento',
+                        ayuda: 'Solo se aplica si el tope está activado.' },
                       cfg.penalizacion_nc_tope)}
         ${campoConfig({ clave: 'penalizacion_nc_confirmada', tipo: 'booleano',
                         etiqueta: 'Criterio acordado con el contratista' },
@@ -963,8 +981,12 @@ const Config = (() => {
 
   function campoConfig(c, valor) {
     if (c.tipo === 'booleano') {
+      // La ayuda también acá: los otros dos tipos ya la mostraban y en un
+      // interruptor —donde lo que hay que explicar es la consecuencia de
+      // activarlo— hace más falta que en ninguno.
       return `<div class="campo-linea">
-        <label for="cfg-${c.clave}">${UI.esc(c.etiqueta)}</label>
+        <label for="cfg-${c.clave}">${UI.esc(c.etiqueta)}
+          ${c.ayuda ? `<span class="ayuda">${UI.esc(c.ayuda)}</span>` : ''}</label>
         <select id="cfg-${c.clave}" data-config="${c.clave}" data-tipo="booleano">
           <option value="0" ${!valor ? 'selected' : ''}>No</option>
           <option value="1" ${valor ? 'selected' : ''}>Sí</option>

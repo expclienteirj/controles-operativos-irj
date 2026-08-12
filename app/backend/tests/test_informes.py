@@ -213,7 +213,19 @@ class TestInformeLimpieza(BaseInformes):
         t = texto_pdf(informes.informe_limpieza(self.conn, PERIODO))
         self.assertIn("monto adjudicado sin cargar", t)
 
+    def test_el_pdf_dice_que_las_nc_no_descuentan(self):
+        """Con el descuento desactivado, el informe tiene que decirlo.
+
+        Quien lee un informe con no conformidades da por sentado que algo
+        descontaron: callarlo dejaría creer que el importe ya las contempla.
+        """
+        self._dia_completo(1, desvio="Algo mal")
+        t = texto_pdf(informes.informe_limpieza(self.conn, PERIODO))
+        self.assertIn("NO descuentan del importe", t)
+
     def test_arrastra_la_advertencia_de_penalizacion_provisoria(self):
+        """Y si se la activa, el PDF advierte que el criterio no es del pliego."""
+        db.set_config(self.conn, "penalizacion_nc_activa", True)
         self._dia_completo(1, desvio="Algo mal")
         t = texto_pdf(informes.informe_limpieza(self.conn, PERIODO))
         self.assertIn("NO surge del pliego", t)

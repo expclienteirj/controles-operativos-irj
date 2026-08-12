@@ -209,14 +209,25 @@ CONFIG = [
     # -- certificación 2.3 --------------------------------------------------
     ("certificacion", "pesos", calc.PESOS_CERTIFICACION_DEFAULT,
      "2.3 — Ponderaciones de los 6 ítems (PCP 4.3). Editables de común acuerdo"),
+    ("certificacion", "penalizacion_nc_activa", False,
+     "¿Las no conformidades descuentan del importe a certificar? Viene "
+     "DESACTIVADA y así debe quedar mientras no se negocie: el PET dice que la "
+     "calidad se ajusta según las no conformidades pero NO fija ninguna "
+     "fórmula, y descontar con un criterio propio es cobrarle al contratista "
+     "sobre una regla que nadie acordó. Las NC se registran e informan igual."),
     ("certificacion", "penalizacion_por_nc", calc.PENALIZACION_NC_DEFAULT,
      "⚠ VALOR PROVISORIO, NO SURGE DEL PLIEGO — Descuento aplicado al ítem "
      "Calidad de servicio por cada no conformidad abierta. El PET indica que la "
      "calidad se ajusta por la cantidad de no conformidades pero no fija la "
      "fórmula. Acordar el criterio real con el contratista y confirmarlo."),
+    ("certificacion", "penalizacion_nc_tope_activo", False,
+     "¿Rige un tope para el descuento por no conformidades? Viene DESACTIVADO: "
+     "el tope no surge del pliego y, como cada desvío genera una NC, cualquier "
+     "mes real lo alcanza — a partir de ahí la penalización deja de distinguir "
+     "un mes de otro. Activarlo solo si se acuerda un tope con el contratista."),
     ("certificacion", "penalizacion_nc_tope", calc.PENALIZACION_NC_TOPE_DEFAULT,
      "⚠ VALOR PROVISORIO, NO SURGE DEL PLIEGO — Tope del descuento acumulado "
-     "por no conformidades."),
+     "por no conformidades. Solo se aplica si el tope está activado."),
     ("certificacion", "penalizacion_nc_confirmada", False,
      "Marcar en True una vez acordado el criterio de penalización por no "
      "conformidad con el contratista. Mientras sea False, la certificación se "

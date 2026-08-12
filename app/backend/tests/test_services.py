@@ -612,6 +612,15 @@ class TestEquipamiento(Base):
 
 
 class TestCertificacion(Base):
+    def _activar_penalizacion(self):
+        """La penalización por NC viene desactivada: no surge del pliego.
+
+        Los tests que miden su mecánica la activan a propósito. Sin esto el
+        descuento es cero y las aserciones sobre el efecto de las NC en el
+        importe quedan vacías en lugar de fallar.
+        """
+        db.set_config(self.conn, "penalizacion_nc_activa", True)
+
     def _mes_completo(self, dias=31):
         """Cierra `dias` días del período (por defecto el mes entero)."""
         for dia in range(1, dias + 1):
@@ -669,6 +678,7 @@ class TestCertificacion(Base):
         self.assertLess(r["peso_evaluado"], 1.0)
 
     def test_no_conformidades_bajan_la_calidad(self):
+        self._activar_penalizacion()
         self._mes_completo()
         self._datos_obligatorios()
         base = services.certificacion(self.conn, PERIODO)["porcentaje"]
@@ -710,6 +720,7 @@ class TestCertificacion(Base):
 
     def test_advierte_que_la_penalizacion_por_nc_es_provisoria(self):
         """El valor no surge del pliego: debe avisarse hasta que se confirme."""
+        self._activar_penalizacion()
         self._mes_completo()
         r = services.certificacion(self.conn, PERIODO)
         aviso = next(a for a in r["advertencias"]
@@ -717,6 +728,7 @@ class TestCertificacion(Base):
         self.assertIn("NO surge del pliego", aviso["mensaje"])
 
     def test_la_advertencia_sube_de_nivel_si_hay_nc_abiertas(self):
+        self._activar_penalizacion()
         self._mes_completo()
         r = services.certificacion(self.conn, PERIODO)
         self.assertEqual(
@@ -743,6 +755,7 @@ class TestCertificacion(Base):
         self.assertNotIn("PENALIZACION_NC_NO_CONFIRMADA", codigos)
 
     def test_penalizacion_configurable_cambia_el_resultado(self):
+        self._activar_penalizacion()
         self._mes_completo()
         self._datos_obligatorios()
         c1 = self.conn.execute(

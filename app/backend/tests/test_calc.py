@@ -190,11 +190,32 @@ class TestCertificacion(unittest.TestCase):
         self.assertAlmostEqual(calc.item_insumos(insumos), 0.5)
 
     def test_calidad_se_alimenta_del_checklist_y_descuenta_nc(self):
-        self.assertAlmostEqual(calc.item_calidad_servicio(0.95, nc_abiertas=0), 0.95)
-        self.assertAlmostEqual(calc.item_calidad_servicio(0.95, nc_abiertas=3), 0.92)
+        self.assertAlmostEqual(calc.item_calidad_servicio(0.95, nc=0), 0.95)
+        self.assertAlmostEqual(calc.item_calidad_servicio(0.95, nc=3), 0.92)
 
-    def test_penalizacion_nc_tiene_tope(self):
-        self.assertAlmostEqual(calc.item_calidad_servicio(1.0, nc_abiertas=100), 0.80)
+    def test_sin_tope_la_penalizacion_sigue_creciendo(self):
+        """El default: cada NC descuenta, sin techo.
+
+        Con tope, en cuanto se lo alcanza la penalización deja de distinguir un
+        mes de otro. Como cada desvío genera una NC, cualquier mes real lo
+        alcanza, así que el tope se volvía un descuento fijo disfrazado.
+        """
+        self.assertAlmostEqual(calc.item_calidad_servicio(1.0, nc=30), 0.70)
+        self.assertAlmostEqual(calc.item_calidad_servicio(1.0, nc=78), 0.22)
+        # 30 y 78 NC no pueden dar lo mismo: era exactamente el problema.
+        self.assertNotAlmostEqual(calc.item_calidad_servicio(1.0, nc=30),
+                                  calc.item_calidad_servicio(1.0, nc=78))
+
+    def test_el_tope_rige_solo_si_se_lo_pasa(self):
+        self.assertAlmostEqual(
+            calc.item_calidad_servicio(1.0, nc=100, tope=0.20), 0.80)
+        self.assertAlmostEqual(calc.descuento_por_nc(100, 0.01, tope=0.20), 0.20)
+        self.assertAlmostEqual(calc.descuento_por_nc(100, 0.01, tope=None), 1.0)
+
+    def test_el_descuento_nunca_pasa_del_100(self):
+        """Sin tope hay que acotar igual: descontar 300% no significa nada."""
+        self.assertAlmostEqual(calc.descuento_por_nc(300, 0.01), 1.0)
+        self.assertAlmostEqual(calc.item_calidad_servicio(0.9, nc=300), 0.0)
 
     def test_certificacion_todo_perfecto_es_100(self):
         items = {k: 1.0 for k in calc.PESOS_CERTIFICACION_DEFAULT}
@@ -778,7 +799,7 @@ class TestMesCompleto(unittest.TestCase):
             "maquinarias": calc.item_maquinarias(6, [0, 1, 0]),
             "insumos": calc.item_insumos([{"stock": 1, "punto_pedido": 5},
                                           {"stock": 9, "punto_pedido": 5}]),
-            "calidad_servicio": calc.item_calidad_servicio(general, nc_abiertas=2)})
+            "calidad_servicio": calc.item_calidad_servicio(general, nc=2)})
         self.assertLess(cert["porcentaje"], 1.0)
         self.assertEqual(
             calc.importe_a_certificar(cert["porcentaje"], 1_000_000),

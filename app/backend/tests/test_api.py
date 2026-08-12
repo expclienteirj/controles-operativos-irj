@@ -861,6 +861,68 @@ class TestConfiguracion(TestAPI):
         paso = next(p for p in despues["pasos"] if p["clave"] == "secciones")
         self.assertTrue(paso["completo"])
 
+    def test_la_penalizacion_por_nc_viene_desactivada(self):
+        """No surge del pliego: no puede descontar del importe por defecto."""
+        _, cfg = self.admin("GET", "/api/config?grupo=certificacion")
+        valores = {c["clave"]: c["valor"] for c in cfg["config"]}
+        self.assertIn("penalizacion_nc_activa", valores)
+        self.assertFalse(valores["penalizacion_nc_activa"])
+
+        _, cert = self.admin("GET", "/api/periodos/2031-07/certificacion")
+        pen = cert["penalizacion_nc"]
+        self.assertFalse(pen["activa"])
+        self.assertEqual(pen["descuento_aplicado"], 0)
+        # Con el descuento apagado, calidad de servicio es el check-list puro.
+        if cert["calidad_base"] is not None:
+            self.assertAlmostEqual(cert["detalle"]["calidad_servicio"]["valor"],
+                                   cert["calidad_base"])
+
+    def test_el_informe_avisa_que_las_nc_no_descuentan(self):
+        """Callarlo dejaría creer que el importe ya contempla las NC."""
+        _, cert = self.admin("GET", "/api/periodos/2031-07/certificacion")
+        codigos = {a["codigo"] for a in cert["advertencias"]}
+        self.assertIn("PENALIZACION_NC_DESACTIVADA", codigos)
+
+    def test_activar_la_penalizacion_vuelve_a_descontar(self):
+        """El interruptor existe para el día que se negocie el criterio."""
+        self.admin("PUT", "/api/config/penalizacion_nc_activa", {"valor": True})
+        try:
+            _, cert = self.admin("GET", "/api/periodos/2031-07/certificacion")
+            pen = cert["penalizacion_nc"]
+            self.assertTrue(pen["activa"])
+            self.assertEqual(
+                pen["descuento_aplicado"],
+                min(cert["no_conformidades_periodo"] * pen["por_nc"], 1.0))
+        finally:
+            self.admin("PUT", "/api/config/penalizacion_nc_activa", {"valor": False})
+
+    def test_el_tope_de_nc_viene_desactivado_y_se_puede_activar(self):
+        _, cfg = self.admin("GET", "/api/config?grupo=certificacion")
+        valores = {c["clave"]: c["valor"] for c in cfg["config"]}
+        self.assertIn("penalizacion_nc_tope_activo", valores)
+        self.assertFalse(valores["penalizacion_nc_tope_activo"],
+                         "el tope no surge del pliego: no puede venir activo")
+
+        codigo, r = self.admin("PUT", "/api/config/penalizacion_nc_tope_activo",
+                               {"valor": True})
+        self.assertEqual(codigo, 200)
+        self.assertTrue(r["valor"])
+
+    def test_el_descuento_informado_es_el_que_se_aplico(self):
+        """La pantalla no puede mostrar un descuento distinto del aplicado.
+
+        El ítem se calcula sobre TODAS las NC del período, pero el descuento se
+        informaba recalculado sobre las abiertas: con NC resueltas en el mes,
+        el número en pantalla quedaba por debajo del que movía el importe.
+        """
+        _, cert = self.admin("GET", "/api/periodos/2031-07/certificacion")
+        pen = cert["penalizacion_nc"]
+        self.assertEqual(pen["no_conformidades"], cert["no_conformidades_periodo"])
+        self.assertFalse(pen["tope_activo"])
+
+        esperado = min(cert["no_conformidades_periodo"] * pen["por_nc"], 1.0)
+        self.assertAlmostEqual(pen["descuento_aplicado"], esperado)
+
     def test_config_rechaza_valor_invalido(self):
         """El 90 en vez de 0,90: el error de carga más probable."""
         codigo, r = self.admin("PUT", "/api/config/iluminacion_objetivo", {"valor": 90})

@@ -907,10 +907,22 @@ def certificacion(conn: sqlite3.Connection, periodo: str,
 
     # Ítems binarios: solo valen 100% si el admin declaró haberlos verificado.
     # Sin esa declaración son Sin datos, no un aprobado automático.
-    penalizacion = db.get_config(conn, "penalizacion_por_nc",
-                                 calc.PENALIZACION_NC_DEFAULT)
-    tope = db.get_config(conn, "penalizacion_nc_tope",
-                         calc.PENALIZACION_NC_TOPE_DEFAULT)
+    # La penalización por no conformidad NO surge del pliego: el PET dice que la
+    # calidad se ajusta según las no conformidades, pero no fija ninguna
+    # fórmula. Por eso viene DESACTIVADA: descontar del importe con un criterio
+    # propio es cobrarle al contratista sobre una regla que nadie acordó. Las NC
+    # se siguen registrando, contando e informando; simplemente no descuentan
+    # hasta que se negocie un criterio y se lo active acá.
+    activa = db.get_config(conn, "penalizacion_nc_activa", False)
+    penalizacion = (db.get_config(conn, "penalizacion_por_nc",
+                                  calc.PENALIZACION_NC_DEFAULT) if activa else 0.0)
+    # El tope solo rige si está activado, y solo importa si la penalización lo
+    # está: con una NC por desvío cualquier mes real alcanza el tope, y a partir
+    # de ahí la penalización deja de distinguir un mes de otro.
+    tope_activo = db.get_config(conn, "penalizacion_nc_tope_activo", False)
+    tope_valor = db.get_config(conn, "penalizacion_nc_tope",
+                               calc.PENALIZACION_NC_TOPE_DEFAULT)
+    tope = tope_valor if (activa and tope_activo) else None
     equipamiento = equipamiento_mensual(conn, periodo)
 
     items = {
@@ -940,8 +952,17 @@ def certificacion(conn: sqlite3.Connection, periodo: str,
         resultado["porcentaje"], datos.get("monto_adjudicado"))
     resultado["monto_adjudicado"] = datos.get("monto_adjudicado")
     resultado["penalizacion_nc"] = {
-        "por_nc": penalizacion, "tope": tope,
-        "descuento_aplicado": min(nc_abiertas * penalizacion, tope),
+        "activa": bool(activa),
+        "por_nc": penalizacion,
+        "tope_activo": bool(activa and tope_activo),
+        "tope": tope_valor,
+        # Se informa el descuento que efectivamente se aplicó, con la misma
+        # función y sobre las mismas NC que usó el cálculo. Antes esta línea
+        # repetía la fórmula por su cuenta y encima sobre `nc_abiertas`, cuando
+        # el ítem se calcula con `nc_periodo`: la pantalla mostraba un descuento
+        # menor que el que realmente se había aplicado.
+        "no_conformidades": nc_periodo,
+        "descuento_aplicado": calc.descuento_por_nc(nc_periodo, penalizacion, tope),
     }
     resultado["completitud"] = resumen["completitud"]
     resultado["advertencias"] = _advertencias_certificacion(
@@ -1002,17 +1023,38 @@ def _advertencias_certificacion(conn, nc_abiertas, penalizacion, resultado,
                   "Conviene cerrarlos antes de certificar."),
         })
 
+    # Sin penalización activa hay que decirlo: quien lee un informe con no
+    # conformidades da por sentado que descontaron algo. Callarlo deja creer
+    # que el importe ya las contempla.
+    if not db.get_config(conn, "penalizacion_nc_activa", False):
+        avisos.append({
+            "codigo": "PENALIZACION_NC_DESACTIVADA",
+            "nivel": "INFO",
+            "mensaje": (
+                "Las no conformidades NO descuentan del importe a certificar. "
+                "El PET indica que la calidad se ajusta según las no "
+                "conformidades pero no fija ninguna fórmula, así que no se "
+                "aplica ninguna. Se registran, se cuentan y se informan"
+                + (f" ({nc_abiertas} abierta(s) en el período)" if nc_abiertas else "")
+                + ". Si se acuerda un criterio con el contratista, se activa en "
+                  "Configuración → Certificación."),
+        })
+
     confirmada = db.get_config(conn, "penalizacion_nc_confirmada", False)
     if not confirmada and penalizacion:
         aviso = {
             "codigo": "PENALIZACION_NC_NO_CONFIRMADA",
             "nivel": "ADVERTENCIA" if nc_abiertas else "INFO",
+            # El texto tiene que decir si el tope rige o no: anunciar un tope
+            # que está desactivado subestima el descuento que se está aplicando.
             "mensaje": (
-                f"El descuento por no conformidad ({penalizacion:.1%} por NC, tope "
-                f"{db.get_config(conn, 'penalizacion_nc_tope', 0):.0%}) es un valor "
-                "provisorio que NO surge del pliego: el PET no fija la fórmula. "
-                "Acordar el criterio con el contratista y confirmarlo en "
-                "Configuración → Certificación."),
+                f"El descuento por no conformidad ({penalizacion:.1%} por NC, "
+                + (f"tope {db.get_config(conn, 'penalizacion_nc_tope', 0):.0%}"
+                   if db.get_config(conn, "penalizacion_nc_tope_activo", False)
+                   else "sin tope")
+                + ") es un valor provisorio que NO surge del pliego: el PET no "
+                  "fija la fórmula. Acordar el criterio con el contratista y "
+                  "confirmarlo en Configuración → Certificación."),
         }
         if nc_abiertas:
             aviso["mensaje"] += (

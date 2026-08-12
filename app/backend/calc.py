@@ -292,15 +292,31 @@ def item_insumos(insumos: list[dict]) -> float | None:
     return ok / len(insumos)
 
 
+def descuento_por_nc(nc: int, penalizacion_nc: float = PENALIZACION_NC_DEFAULT,
+                     tope: float | None = None) -> float:
+    """Descuento acumulado por no conformidades.
+
+    `tope=None` significa **sin tope**: el descuento crece con cada NC. Es el
+    default porque un tope hace que la penalización deje de discriminar en
+    cuanto se lo alcanza —un mes con 25 NC y uno con 78 pagan lo mismo— y en
+    esta operación, donde cada desvío genera una NC, cualquier mes real lo
+    alcanza. Si se acuerda un tope con el contratista se activa por
+    configuración; hasta entonces no se aplica uno inventado.
+
+    El resultado se acota a 1.0: descontar más del 100% no significa nada, y
+    quien consume esto ya lo resta de un porcentaje.
+    """
+    return min((nc or 0) * penalizacion_nc, tope if tope is not None else 1.0)
+
+
 def item_calidad_servicio(estado_general: float | None,
-                          nc_abiertas: int = 0,
+                          nc: int = 0,
                           penalizacion_nc: float = PENALIZACION_NC_DEFAULT,
-                          tope: float = PENALIZACION_NC_TOPE_DEFAULT) -> float | None:
+                          tope: float | None = None) -> float | None:
     """Ítem 6: se alimenta del estado general del check-list, ajustado por NC."""
     if estado_general is None:
         return None
-    descuento = min((nc_abiertas or 0) * penalizacion_nc, tope)
-    return _clamp(estado_general - descuento)
+    return _clamp(estado_general - descuento_por_nc(nc, penalizacion_nc, tope))
 
 
 def certificacion_mensual(items: dict[str, float | None],
