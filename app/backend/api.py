@@ -196,12 +196,30 @@ CATALOGOS_SEMBRADOS = ("sectores_limpieza", "items_limpieza",
                        "equipamiento_limpieza", "los_items", "config")
 
 
+def _claves_config_faltantes(conn) -> list[str]:
+    """Claves de configuración que el seed define y la base no tiene.
+
+    Una clave ausente no rompe nada visible: `get_config` devuelve su default y
+    la app calcula bien, pero el endpoint que la edita responde 404 y el
+    parámetro queda inmodificable desde la pantalla — una función apagada en
+    silencio. Pasó dos veces: con la fila única de asientos y con los
+    interruptores de la penalización por NC.
+
+    Las esperadas salen del propio seed y no de una lista aparte: dos listas se
+    desincronizan en cuanto alguien agrega un parámetro y actualiza solo una.
+    """
+    import seed
+    esperadas = {clave for _grupo, clave, *_ in seed.CONFIG}
+    presentes = {f["clave"] for f in conn.execute("SELECT clave FROM config")}
+    return sorted(esperadas - presentes)
+
+
 def chequeos_estructurales(conn) -> list[str]:
     """Problemas de estructura de la base, en lenguaje llano.
 
     Verifica lo que el código da por sentado y nadie comprueba al desplegar.
-    Devuelve solo nombres de tablas y qué les falta: ni datos de la operación,
-    ni conteos, ni nada que sirva a un tercero.
+    Devuelve solo nombres de tablas y claves de configuración con lo que les
+    falta: ni valores, ni conteos, ni datos de la operación.
     """
     problemas = []
     for tabla in FILAS_UNICAS:
@@ -212,6 +230,9 @@ def chequeos_estructurales(conn) -> list[str]:
         fila = conn.execute(f"SELECT COUNT(*) c FROM {tabla}").fetchone()
         if not fila["c"]:
             problemas.append(f"{tabla}: sin sembrar")
+    faltantes = _claves_config_faltantes(conn)
+    if faltantes:
+        problemas.append("config: faltan las claves " + ", ".join(faltantes))
     return problemas
 
 

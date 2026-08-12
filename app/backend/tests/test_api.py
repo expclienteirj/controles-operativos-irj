@@ -1064,6 +1064,35 @@ class TestConfiguracion(TestAPI):
             conn.commit()
             conn.close()
 
+    def test_version_detecta_una_clave_de_config_faltante(self):
+        """Una clave ausente apaga un parámetro en silencio: hay que verla.
+
+        `get_config` devuelve su default, así que el cálculo sigue bien, pero el
+        endpoint que la edita responde 404 y el parámetro queda inmodificable
+        desde la pantalla. Nada avisaba: se descubría al ir a usarlo.
+        """
+        conn = db.conectar()
+        fila = conn.execute(
+            "SELECT * FROM config WHERE clave = 'penalizacion_nc_activa'").fetchone()
+        conn.execute("DELETE FROM config WHERE clave = 'penalizacion_nc_activa'")
+        conn.commit()
+        conn.close()
+        try:
+            _, datos = self.pedir("GET", "/api/version")
+            self.assertFalse(datos["estructura_ok"])
+            self.assertTrue(
+                any("penalizacion_nc_activa" in p for p in datos["problemas"]),
+                datos["problemas"])
+        finally:
+            conn = db.conectar()
+            conn.execute(
+                "INSERT INTO config (clave, valor, grupo, descripcion, editable) "
+                "VALUES (?,?,?,?,?)",
+                (fila["clave"], fila["valor"], fila["grupo"],
+                 fila["descripcion"], fila["editable"]))
+            conn.commit()
+            conn.close()
+
     def test_version_no_filtra_datos_de_la_operacion(self):
         """Es pública: solo puede decir qué falta, nunca qué hay."""
         _, datos = self.pedir("GET", "/api/version")
