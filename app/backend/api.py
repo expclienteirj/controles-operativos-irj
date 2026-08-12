@@ -631,10 +631,19 @@ def crear_control(ctx):
     if turno not in calc.TURNOS:
         raise ErrorAPI(f"Turno inválido: debe ser uno de {', '.join(calc.TURNOS)}")
 
-    # No se abren controles de días que todavía no ocurrieron: un control es
-    # el registro de una recorrida, no una planificación.
-    if fecha > _dt.date.today().isoformat():
+    # Un control solo se abre el día que corresponde: no es una planificación
+    # (fecha futura) ni una recorrida reconstruida después (fecha pasada). Si
+    # el auditor se salteó un día, ese recorrido queda como no hecho — no se
+    # puede recrear más tarde, ni siquiera por un administrador, porque no
+    # existe otra vía de alta de controles_limpieza que esta. Es la garantía
+    # de justicia con el prestador: el registro se toma en el momento o no
+    # se toma.
+    hoy = _dt.date.today().isoformat()
+    if fecha > hoy:
         raise ErrorAPI("No se puede abrir el control de una fecha futura")
+    if fecha < hoy:
+        raise ErrorAPI("No se puede abrir el control de una fecha anterior: "
+                        "el recorrido que no se hizo en su momento queda como no hecho")
 
     try:
         cur = ctx["conn"].execute(

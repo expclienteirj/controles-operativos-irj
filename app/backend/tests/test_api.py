@@ -1,5 +1,6 @@
 """Tests de la API: se levanta un servidor real y se le pega por HTTP."""
 
+import datetime
 import hashlib
 import json
 import os
@@ -27,6 +28,25 @@ api.UPLOADS_DIR = os.path.join(TMP, "uploads")
 PIXEL_PNG = ("data:image/png;base64,"
              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmM"
              "IQAAAABJRU5ErkJggg==")
+
+HOY = datetime.date.today().isoformat()
+
+
+def _control_directo(fecha, turno="MANANA"):
+    """Da de alta un control con una fecha arbitraria (incluso pasada), sin
+    pasar por /api/controles: ese endpoint ahora solo abre el control de
+    hoy. Sirve para tests que necesitan un control como dato de partida y no
+    están probando esa validación de fecha."""
+    conn = db.conectar()
+    uid = conn.execute(
+        "SELECT id FROM usuarios WHERE usuario = 'jperez'").fetchone()["id"]
+    cur = conn.execute(
+        "INSERT INTO controles_limpieza (fecha, turno, periodo, auditor_id) "
+        "VALUES (?,?,?,?)", (fecha, turno, fecha[:7], uid))
+    conn.commit()
+    control_id = cur.lastrowid
+    conn.close()
+    return control_id
 
 
 class TestAPI(unittest.TestCase):
@@ -208,10 +228,7 @@ class TestAutenticacion(TestAPI):
 
 class TestFlujoLimpieza(TestAPI):
     def _control_nuevo(self, fecha, turno="MANANA"):
-        codigo, r = self.auditor("POST", "/api/controles",
-                                 {"fecha": fecha, "turno": turno})
-        self.assertEqual(codigo, 200, r)
-        return r["control_id"]
+        return _control_directo(fecha, turno)
 
     def test_los_dos_turnos_del_dia_son_controles_distintos(self):
         m = self._control_nuevo("2020-01-08", "MANANA")
@@ -222,34 +239,26 @@ class TestFlujoLimpieza(TestAPI):
         delDia = [c for c in r["controles"] if c["fecha"] == "2020-01-08"]
         self.assertEqual(sorted(c["turno"] for c in delDia), ["MANANA", "TARDE"])
 
-    def test_no_se_repite_el_mismo_turno_del_mismo_dia(self):
-        self._control_nuevo("2020-01-09", "TARDE")
-        codigo, _ = self.auditor("POST", "/api/controles",
-                                 {"fecha": "2020-01-09", "turno": "TARDE"})
-        self.assertEqual(codigo, 409)
-
     def test_turno_invalido_se_rechaza(self):
         codigo, _ = self.auditor("POST", "/api/controles",
                                  {"fecha": "2020-01-10", "turno": "NOCHE"})
         self.assertEqual(codigo, 400)
 
     def test_sin_turno_explicito_se_abre_el_de_la_manana(self):
-        """Compatibilidad: el cliente viejo no manda turno."""
-        codigo, r = self.auditor("POST", "/api/controles", {"fecha": "2020-01-11"})
+        """Compatibilidad: el cliente viejo no manda turno. Un solo control
+        por día: reabrir el mismo día no crea otro."""
+        codigo, r = self.auditor("POST", "/api/controles", {"fecha": HOY})
         self.assertEqual(codigo, 200)
         self.assertEqual(r["turno"], "MANANA")
+
+        codigo, _ = self.auditor("POST", "/api/controles", {"fecha": HOY})
+        self.assertEqual(codigo, 409)
 
     def test_sectores_con_items(self):
         _, r = self.auditor("GET", "/api/sectores")
         self.assertEqual(len(r["sectores"]), 9)
         embarque = next(s for s in r["sectores"] if s["clave"] == "sala_embarque")
         self.assertEqual(len(embarque["items"]), 9)   # + "Techo"
-
-    def test_control_duplicado_es_409(self):
-        """Un solo control por día: reabrir el mismo día no crea otro."""
-        self._control_nuevo("2020-01-05")
-        codigo, _ = self.auditor("POST", "/api/controles", {"fecha": "2020-01-05"})
-        self.assertEqual(codigo, 409)
 
     def test_fecha_invalida(self):
         codigo, _ = self.auditor("POST", "/api/controles", {"fecha": "05/01/2020"})
@@ -261,12 +270,22 @@ class TestFlujoLimpieza(TestAPI):
         self.assertEqual(codigo, 400)
         self.assertIn("futura", r["error"])
 
+    def test_no_se_abre_el_control_de_una_fecha_pasada(self):
+        """Regla de justicia con el prestador: el recorrido que no se hizo
+        en su momento queda como no hecho, no se reconstruye después."""
+        codigo, r = self.auditor("POST", "/api/controles", {"fecha": "2020-01-01"})
+        self.assertEqual(codigo, 400)
+        self.assertIn("anterior", r["error"])
+
     def test_sin_fecha_abre_el_control_de_hoy(self):
-        import datetime
-        hoy = datetime.date.today().isoformat()
-        codigo, r = self.auditor("POST", "/api/controles", {})
+        """Sin fecha explícita, abre el de hoy. Y tampoco se repite el
+        mismo turno del mismo día."""
+        codigo, r = self.auditor("POST", "/api/controles", {"turno": "TARDE"})
         self.assertEqual(codigo, 200, r)
-        self.assertEqual(r["fecha"], hoy)
+        self.assertEqual(r["fecha"], HOY)
+
+        codigo, _ = self.auditor("POST", "/api/controles", {"turno": "TARDE"})
+        self.assertEqual(codigo, 409)
 
     def test_control_de_hoy(self):
         import datetime
@@ -719,8 +738,7 @@ class TestEquipamientoAPI(TestAPI):
     """El ítem 4 se releva en el control diario, no se carga como horas."""
 
     def _control(self, fecha):
-        _, r = self.auditor("POST", "/api/controles", {"fecha": fecha})
-        return r["control_id"]
+        return _control_directo(fecha)
 
     def test_el_control_lista_los_equipos_exigidos(self):
         cid = self._control("2021-03-01")
@@ -1264,8 +1282,7 @@ class TestEquipamientoEInsumos(TestAPI):
 class TestSync(TestAPI):
     def test_operacion_duplicada_no_se_aplica_dos_veces(self):
         """Escenario real: la tablet pierde red al confirmar y reintenta."""
-        _, ctrl = self.auditor("POST", "/api/controles", {"fecha": "2020-10-01"})
-        cid = ctrl["control_id"]
+        cid = _control_directo("2020-10-01")
         _, sectores = self.auditor("GET", "/api/sectores")
         item = sectores["sectores"][0]["items"][0]["id"]
 
@@ -1284,8 +1301,7 @@ class TestSync(TestAPI):
         self.assertEqual(len(nc["no_conformidades"]), 1)
 
     def test_lote_mixto_no_aborta_por_un_error(self):
-        _, ctrl = self.auditor("POST", "/api/controles", {"fecha": "2020-11-01"})
-        cid = ctrl["control_id"]
+        cid = _control_directo("2020-11-01")
         _, sectores = self.auditor("GET", "/api/sectores")
         sid = sectores["sectores"][0]["id"]
 
@@ -1382,8 +1398,7 @@ class TestReapertura(TestAPI):
         return cid
 
     def _control_nuevo(self, fecha, turno="MANANA"):
-        _, r = self.auditor("POST", "/api/controles", {"fecha": fecha, "turno": turno})
-        return r["control_id"]
+        return _control_directo(fecha, turno)
 
     def test_el_auditor_no_puede_reabrir(self):
         cid = self._cerrado("2025-11-04")
@@ -1479,8 +1494,7 @@ class TestArtefactosDesdeElControl(TestAPI):
         return TestArtefactosDesdeElControl._nucleo
 
     def _control(self, fecha):
-        _, r = self.auditor("POST", "/api/controles", {"fecha": fecha})
-        return r["control_id"]
+        return _control_directo(fecha)
 
     def test_el_control_lista_los_nucleos_con_su_estado(self):
         cid = self._control("2025-12-01")

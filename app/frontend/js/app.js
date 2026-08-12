@@ -479,6 +479,11 @@ const App = (() => {
    * Abre un día del calendario. Con dos turnos por día ya no hay un único
    * control que abrir: se muestran los dos y el auditor elige, salvo que el
    * día esté vacío, donde se ofrece iniciar cualquiera de los dos.
+   *
+   * "Iniciar" solo se ofrece si `fecha` es hoy: el servidor rechaza abrir un
+   * control de un día pasado o futuro (el recorrido que no se hizo en su
+   * momento queda como no hecho, ni siquiera un administrador lo reconstruye
+   * después), así que para cualquier otro día ni se muestra el botón.
    */
   async function abrirDia(periodo, fecha) {
     let controles = [];
@@ -488,6 +493,7 @@ const App = (() => {
       controles = (await Store.get('meta', `cache:controles:${periodo}`)) || [];
     }
     const delDia = controles.filter((x) => x.fecha === fecha);
+    const esHoy = fecha === UI.hoyISO();
 
     UI.abrirHoja(`
       <h3>${UI.esc(UI.fechaLarga(fecha))}</h3>
@@ -495,6 +501,7 @@ const App = (() => {
       ${['MANANA', 'TARDE'].map((turno) => {
         const c = delDia.find((x) => x.turno === turno);
         const nombre = NOMBRE_TURNO[turno];
+        const puedeIniciar = !c && esHoy;
         return `<div class="sector ${c ? (c.estado === 'CERRADO' ? 'sin-novedades'
                                                                 : 'con-desvios')
                                        : 'pendiente'}" style="margin-bottom:8px">
@@ -505,9 +512,11 @@ const App = (() => {
                                                                 : 'En curso')
                                       : 'No se hizo'}</span>
           </div>
-          <button class="btn-sector-ok"
-                  ${c ? `data-ver="${c.id}"` : `data-nuevo="${turno}"`}>
-            ${c ? 'Abrir' : 'Iniciar'}</button>
+          ${c || puedeIniciar
+            ? `<button class="btn-sector-ok"
+                       ${c ? `data-ver="${c.id}"` : `data-nuevo="${turno}"`}>
+                 ${c ? 'Abrir' : 'Iniciar'}</button>`
+            : ''}
         </div>`;
       }).join('')}
       <div class="acciones">
