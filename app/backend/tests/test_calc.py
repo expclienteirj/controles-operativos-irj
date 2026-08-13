@@ -468,22 +468,6 @@ class TestInfraestructura(unittest.TestCase):
         self.assertEqual(len(r["no_conformidades"]), 1)
         self.assertEqual(r["no_conformidades"][0]["prioridad"], "INMEDIATA")
 
-    def test_veredas_grietas_mayor_a_1cm_es_d(self):
-        self.assertEqual(calc.grado_veredas_grietas(1.5), "D")
-        self.assertEqual(calc.grado_veredas_grietas(0.8), "B")
-
-    def test_veredas_superficie_dano_leve_es_b(self):
-        self.assertEqual(calc.grado_veredas_superficie(30, 10, 1.0), "B")
-
-    def test_veredas_superficie_escalonamiento_es_c(self):
-        self.assertEqual(calc.grado_veredas_superficie(30, 10, 1.0, escalonamiento_cm=0.7), "C")
-
-    def test_veredas_superficie_dano_grande_es_c(self):
-        self.assertEqual(calc.grado_veredas_superficie(500, 20, 3.0), "C")
-
-    def test_veredas_superficie_dano_severo_es_d(self):
-        self.assertEqual(calc.grado_veredas_superficie(20000, 200, 5.0), "D")
-
 
 # ---------------------------------------------------------------------------
 # 3.5 / 3.6 — Asientos y puntos de carga

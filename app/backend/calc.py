@@ -516,31 +516,6 @@ def infraestructura(subitems: dict[str, str | None]) -> dict:
             "cumple": all(d["cumple"] for d in evaluados) if evaluados else None}
 
 
-def grado_veredas_grietas(separacion_cm: float) -> str:
-    """Grietas en veredas y vialidades: D si la separación supera 1 cm."""
-    return "D" if separacion_cm > 1.0 else "B"
-
-
-def grado_veredas_superficie(superficie_cm2: float, diametro_cm: float,
-                             profundidad_cm: float,
-                             escalonamiento_cm: float = 0.0) -> str:
-    """Superficies dañadas / baldosas sueltas, según umbrales del manual.
-
-    D: daño > 1 m² (10.000 cm²) y profundidad > 4 cm
-    C: escalonamiento 0,5–1 cm, o daño > 15 cm de diámetro y prof. > 2 cm
-    B: superficie < 40 cm², diámetro < 15 cm y profundidad < 2 cm
-    """
-    if superficie_cm2 > 10000 and profundidad_cm > 4:
-        return "D"
-    if 0.5 <= escalonamiento_cm <= 1.0:
-        return "C"
-    if diametro_cm > 15 and profundidad_cm > 2:
-        return "C"
-    if superficie_cm2 < 40 and diametro_cm < 15 and profundidad_cm < 2:
-        return "B"
-    return "C"
-
-
 # ---------------------------------------------------------------------------
 # LoS 3.5 — ASIENTOS EN PREEMBARQUE
 # ---------------------------------------------------------------------------
