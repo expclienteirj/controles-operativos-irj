@@ -2384,8 +2384,14 @@ const App = (() => {
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // Sin service worker la app funciona online; no vale interrumpir al usuario.
+    navigator.serviceWorker.register('/sw.js').catch((e) => {
+      // Sin service worker la app funciona online, así que no vale interrumpir
+      // al usuario. Pero sí queda registrado en consola: si esto falla, el
+      // dispositivo pierde el modo sin conexión entero —la razón por la que
+      // esta app es una PWA— y hasta ahora ocurría en silencio absoluto, sin
+      // manera de enterarse ni de diagnosticarlo sobre una tablet en la
+      // terminal. Diagnosticar un "no me abre sin señal" empieza por acá.
+      console.warn('No se pudo registrar el service worker:', (e && e.message) || e);
     });
   });
 

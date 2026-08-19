@@ -94,10 +94,17 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== location.origin) return;      // nada externo
   if (e.request.method !== 'GET') return;          // las escrituras van por la cola
 
-  if (url.pathname.startsWith('/api/')) {
-    e.respondWith(fetch(e.request));
-    return;
-  }
+  // API: se deja pasar sin tocar. Salir sin llamar a `respondWith` hace que el
+  // navegador resuelva el pedido por su cuenta, sin pasar por el worker.
+  //
+  // Antes acá había un `respondWith(fetch(e.request))`, que da exactamente el
+  // mismo resultado —ir a la red— pero metiendo al worker en el camino de las
+  // ~30 llamadas que hace cada pantalla. Eso no aporta nada y sí agrega modos
+  // de falla: si el worker está reinstalándose, fue terminado por el sistema o
+  // su fetch falla por lo que sea, el pedido muere y la pantalla recibe un
+  // "Failed to fetch" que no distingue de un corte de red real. Con `return`
+  // el worker no puede romper una llamada a la API aunque quiera.
+  if (url.pathname.startsWith('/api/')) return;
 
   // Íconos: cache-first, son inmutables.
   if (url.pathname.startsWith('/icons/')) {
