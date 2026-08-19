@@ -121,11 +121,29 @@ const Config = (() => {
     layout('Configuración del Aeropuerto', 'IRJ — categoría G5',
            '<div class="vacio">Cargando…</div>', { volver: '/' });
 
+    // Acá no se cae al caché, a diferencia de Limpieza o LoS: las trece
+    // acciones de guardado de esta pantalla van directo al servidor y ninguna
+    // se encola. Mostrar la configuración desde una copia local dejaría al
+    // admin editando contra una pantalla incapaz de guardar, y de este
+    // inventario dependen los porcentajes de LoS y la certificación.
+    if (!navigator.onLine) {
+      return ($('.contenido').innerHTML = `
+        <div class="aviso advertencia">
+          <strong>Sin conexión</strong>
+          La configuración se guarda en el servidor, así que necesita red.
+          Volvé a entrar cuando haya conexión.
+        </div>`);
+    }
+
     try {
       onboarding = await API.get('/api/onboarding');
     } catch (e) {
-      return ($('.contenido').innerHTML =
-        `<div class="aviso error">No se pudo cargar la configuración: ${UI.esc(e.message)}</div>`);
+      // Un error del servidor trae `codigo` y su mensaje sirve; una caída de
+      // red no lo trae, y "Failed to fetch" no le dice nada a nadie.
+      return ($('.contenido').innerHTML = `<div class="aviso error">${e.codigo
+        ? `No se pudo cargar la configuración: ${UI.esc(e.message)}`
+        : 'No se pudo conectar con el servidor. Revisá la conexión y volvé a '
+          + 'entrar: la configuración no se puede editar sin red.'}</div>`);
     }
 
     $('.contenido').innerHTML = `

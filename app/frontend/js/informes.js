@@ -48,8 +48,15 @@ const Informes = (() => {
         API.get(`/api/los/dashboard?periodo=${periodo}`),
       ]);
     } catch (e) {
-      return ($('.contenido').innerHTML =
-        `<div class="aviso error">No se pudo cargar el período: ${UI.esc(e.message)}</div>`);
+      // El aviso de arriba cubre el caso en que el navegador se sabe sin red.
+      // Este cubre el otro, que es el que se ve en la terminal: se cree
+      // conectado —wifi tomada, sin salida— y el pedido muere igual. Sin esto
+      // el auditor leía el "Failed to fetch" crudo del navegador.
+      return ($('.contenido').innerHTML = `<div class="aviso error">${e.codigo
+        ? `No se pudo cargar el período: ${UI.esc(e.message)}`
+        : 'No se pudo conectar con el servidor. Los informes los genera el '
+          + 'servidor, así que necesitan red: probá de nuevo cuando vuelva la '
+          + 'conexión.'}</div>`);
     }
 
     // Los controles del mes alimentan el selector de día: solo se ofrecen
