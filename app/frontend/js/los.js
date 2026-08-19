@@ -26,21 +26,63 @@ const LoS = (() => {
    * cuando hay un único ítem incumpliendo: dejar al auditor en el tablero lo
    * obligaba a buscar a ojo cuál de los once era el que lo trajo hasta acá.
    */
+  /**
+   * Lectura tolerante a la red, como en Inicio y Limpieza.
+   *
+   * Esta era la única pantalla que pedía sus datos con `API.get` pelado, que
+   * es un `fetch` sin red de contención: cualquier corte —lo habitual en una
+   * tablet recorriendo la terminal— la dejaba en blanco con el mensaje crudo
+   * del navegador ("Failed to fetch"). La incoherencia era doble, porque la
+   * carga de mediciones sí sabe encolarse y seguir sin conexión: la pantalla
+   * podía escribir offline pero no podía abrirse.
+   *
+   * `estado.desdeCache` se marca para poder decirlo en pantalla. Mostrar un
+   * "no cumple" de hace tres días como si fuera de ahora sería peor que no
+   * mostrar nada: de estos estados sale la certificación del mes.
+   */
+  async function leerConCache(ruta, clave, estado) {
+    try {
+      const datos = await API.get(ruta);
+      await Store.set('meta', clave, datos);
+      return datos;
+    } catch (e) {
+      const guardado = await Store.get('meta', clave);
+      if (!guardado) throw e;
+      estado.desdeCache = true;
+      return guardado;
+    }
+  }
+
+  function avisarSinRed() {
+    const caja = $('.contenido');
+    if (!caja) return;
+    caja.insertAdjacentHTML('afterbegin', `
+      <div class="aviso advertencia">
+        <strong>Sin conexión — datos de la última sincronización</strong>
+        Lo que cargues se guarda y se envía al recuperar la red, pero los
+        estados de cumplimiento pueden no reflejar lo último relevado.
+      </div>`);
+  }
+
   async function vista(layout, ir, itemClave) {
     periodo = UI.periodoActual();
     layout('Niveles de Servicio', UI.nombrePeriodo(periodo),
            '<div class="vacio">Cargando…</div>', { volver: '/' });
 
+    const estado = { desdeCache: false };
     try {
       const [dash, actual, listaItems] = await Promise.all([
-        API.get(`/api/los/dashboard?periodo=${periodo}`),
-        API.get(`/api/los/relevamientos/actual?periodo=${periodo}`),
-        API.get('/api/los/items'),
+        leerConCache(`/api/los/dashboard?periodo=${periodo}`,
+                     `cache:los-dashboard:${periodo}`, estado),
+        leerConCache(`/api/los/relevamientos/actual?periodo=${periodo}`,
+                     `cache:los-relevamiento:${periodo}`, estado),
+        leerConCache('/api/los/items', 'cache:los-items', estado),
       ]);
       relevamiento = actual.relevamiento;
       mediciones = actual.mediciones || {};
       items = listaItems.items;
       pintarDashboard(dash, layout, ir);
+      if (estado.desdeCache) avisarSinRed();
       // El tablero ya pintó sus botones, así que alcanza con accionar el del
       // ítem pedido: hereda tal cual su comportamiento (solo lectura, inerte,
       // hoja de carga) sin duplicar acá ninguna de esas reglas.
@@ -50,8 +92,14 @@ const LoS = (() => {
         if (boton) boton.click();
       }
     } catch (e) {
-      $('.contenido').innerHTML =
-        `<div class="aviso error">No se pudo cargar: ${UI.esc(e.message)}</div>`;
+      // Sin red y sin copia local. Un error del servidor trae `codigo` y su
+      // mensaje sirve; una caída de red no lo trae, y "Failed to fetch" no le
+      // dice nada a un auditor parado en la terminal.
+      $('.contenido').innerHTML = `<div class="aviso error">${e.codigo
+        ? `No se pudo cargar: ${UI.esc(e.message)}`
+        : 'Sin conexión y sin datos guardados de este mes. Se necesita red '
+          + 'para abrir Niveles de Servicio la primera vez; después queda '
+          + 'disponible sin conexión.'}</div>`;
     }
   }
 
