@@ -766,9 +766,101 @@ def control_del_dia(conn: sqlite3.Connection, hoy: date | None = None) -> dict:
                "control": _resumen_control(conn, filas.get(t), estados)}
               for t in calc.TURNOS]
 
+    mes = completitud_periodo(conn, periodo, hoy)
     return {"fecha": fecha, "periodo": periodo,
             "turnos": turnos,
-            "mes": completitud_periodo(conn, periodo, hoy)}
+            "mes": mes,
+            # Viaja acá y no en una ruta propia por dos razones: esta pantalla
+            # ya calcula la completitud del mes —la mitad del trabajo— y ya
+            # guarda su respuesta en caché, así que el semáforo sigue teniendo
+            # color cuando la tablet abre sin conexión.
+            "modulos": estado_modulos(conn, hoy, mes)}
+
+
+# Semáforo de las cuatro tarjetas de la pantalla de inicio.
+#
+#   AL_DIA    (verde)    no falta nada de lo que ese módulo aporta al mes.
+#   EN_PLAZO  (amarillo) falta algo, pero todavía se puede cargar.
+#   VENCIDO   (rojo)     falta algo y el plazo se terminó.
+#
+# El plazo es el último día del mes: la liquidación cierra ahí, así que lo que
+# no esté cargado ese día ya no entra. Antes de esa fecha, un faltante es
+# trabajo pendiente y no una falta; después, es una falta.
+ESTADO_AL_DIA = "AL_DIA"
+ESTADO_EN_PLAZO = "EN_PLAZO"
+ESTADO_VENCIDO = "VENCIDO"
+
+
+def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
+                   mes: dict | None = None) -> dict:
+    """Qué le falta a cada módulo para la liquidación del mes en curso.
+
+    Los cuatro colores de inicio salían fijos en el HTML: Limpieza y LoS
+    siempre verdes, Informes siempre gris. Un indicador que dice lo mismo pase
+    lo que pase no informa nada, y además mentía —verde con dieciséis días sin
+    auditar—. Acá se calcula de verdad.
+
+    El semáforo es el mismo para auditor y admin a propósito. Hay datos que
+    solo el admin puede cargar, pero el auditor tiene que poder ver que faltan:
+    o se lo avisa, o lo ve reflejado en el resultado del mes.
+    """
+    hoy = hoy or date.today()
+    periodo = hoy.strftime("%Y-%m")
+    # El plazo vence el último día del mes. Se compara con >= para que un mes
+    # ya cerrado (si se consulta hacia atrás) cuente como vencido, no como
+    # "todavía hay tiempo".
+    vencido = hoy.isoformat() >= calc.dias_del_mes(periodo)[-1]
+
+    def semaforo(falta: bool) -> str:
+        if not falta:
+            return ESTADO_AL_DIA
+        return ESTADO_VENCIDO if vencido else ESTADO_EN_PLAZO
+
+    # -- Limpieza: las dos recorridas exigidas del día ----------------------
+    cerrados_hoy = {f["turno"] for f in conn.execute(
+        "SELECT turno FROM controles_limpieza WHERE fecha = ? AND estado = 'CERRADO'",
+        (hoy.isoformat(),))}
+    limpieza = semaforo(len(cerrados_hoy) < len(calc.TURNOS))
+
+    # -- Niveles de servicio ------------------------------------------------
+    # Un ítem que no cumple es rojo sin importar el día: no es una carga
+    # pendiente sino un incumplimiento ya medido, y el plazo no lo cambia.
+    try:
+        dash = dashboard_los(conn, periodo)
+        incumple = any(i["estado"] == "NO_CUMPLE" for i in dash["items"])
+        sin_relevar = bool(dash["items_sin_datos"])
+    except Exception:
+        incumple, sin_relevar = False, False
+    los = ESTADO_VENCIDO if incumple else semaforo(sin_relevar)
+
+    # -- Datos del período que exige la certificación -----------------------
+    fila = conn.execute("SELECT * FROM periodo_datos WHERE periodo = ?",
+                        (periodo,)).fetchone()
+    d = dict(fila) if fila else {}
+    # Los tres de calc.ITEMS_OBLIGATORIOS: sin ellos la certificación no se
+    # emite (devuelve None), no es que salga más baja.
+    faltan_obligatorios = not (d.get("documentacion_verificada")
+                               and d.get("ley_19587_verificada")
+                               and d.get("horas_hombre_programadas"))
+
+    activos = conn.execute(
+        "SELECT COUNT(*) c FROM insumos WHERE activo = 1").fetchone()["c"]
+    relevados = conn.execute(
+        "SELECT COUNT(*) c FROM insumo_stock WHERE periodo = ?",
+        (periodo,)).fetchone()["c"]
+
+    config = semaforo(faltan_obligatorios
+                      or not d.get("monto_adjudicado")
+                      or (activos and relevados < activos)
+                      or bool(db.inventario_pendiente(conn)))
+
+    # -- Informes: ¿la liquidación del mes se puede emitir? -----------------
+    # Mientras queden días por recorrer, cualquier informe es provisional.
+    mes = mes or completitud_periodo(conn, periodo, hoy)
+    informes = semaforo(faltan_obligatorios or not mes["completo"])
+
+    return {"periodo": periodo, "vence_hoy": vencido, "limpieza": limpieza,
+            "los": los, "informes": informes, "config": config}
 
 
 def _resumen_control(conn: sqlite3.Connection, fila,

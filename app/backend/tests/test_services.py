@@ -1414,6 +1414,82 @@ class TestCorreccionDeBajas(Base):
         self.assertEqual(r["equipos_con_faltas"], [])
 
 
+class TestEstadoModulos(Base):
+    """Semáforo de las tarjetas de inicio. La regla que más se puede romper es
+    la del plazo: hasta el último día del mes un faltante es trabajo pendiente
+    (amarillo); ese día ya es una falta (rojo)."""
+
+    def _completar_obligatorios(self):
+        self.conn.execute(
+            "INSERT INTO periodo_datos (periodo, documentacion_verificada, "
+            "ley_19587_verificada, horas_hombre_programadas, monto_adjudicado) "
+            "VALUES (?,1,1,1000,500000)", (PERIODO,))
+        self.conn.commit()
+
+    def test_lo_que_falta_a_mitad_de_mes_esta_en_plazo(self):
+        r = services.estado_modulos(self.conn, date(2026, 7, 15))
+        self.assertEqual(r["informes"], services.ESTADO_EN_PLAZO)
+        self.assertEqual(r["config"], services.ESTADO_EN_PLAZO)
+        self.assertFalse(r["vence_hoy"])
+
+    def test_lo_mismo_el_ultimo_dia_del_mes_ya_es_una_falta(self):
+        """La liquidación cierra el 31: lo que no esté cargado ese día no entra."""
+        r = services.estado_modulos(self.conn, date(2026, 7, 31))
+        self.assertTrue(r["vence_hoy"])
+        self.assertEqual(r["informes"], services.ESTADO_VENCIDO)
+        self.assertEqual(r["config"], services.ESTADO_VENCIDO)
+
+    def test_el_ultimo_dia_de_un_mes_de_30_tambien_vence(self):
+        r = services.estado_modulos(self.conn, date(2026, 6, 30))
+        self.assertTrue(r["vence_hoy"])
+
+    def test_limpieza_verde_solo_con_las_dos_recorridas_cerradas(self):
+        c = self._control(15, "MANANA")
+        self._confirmar_todos(c)
+        services.cerrar_control(self.conn, c, self.auditor)
+        # Con una sola no alcanza: se exigen dos por día.
+        self.assertEqual(services.estado_modulos(self.conn, date(2026, 7, 15))["limpieza"],
+                         services.ESTADO_EN_PLAZO)
+
+        c2 = self._control(15, "TARDE")
+        self._confirmar_todos(c2)
+        services.cerrar_control(self.conn, c2, self.auditor)
+        self.assertEqual(services.estado_modulos(self.conn, date(2026, 7, 15))["limpieza"],
+                         services.ESTADO_AL_DIA)
+
+    def test_un_item_de_los_que_no_cumple_es_rojo_aunque_haya_plazo(self):
+        """No es una carga pendiente sino un incumplimiento ya medido: el
+        calendario no lo mejora."""
+        rid = services.obtener_o_crear_relevamiento_los(
+            self.conn, PERIODO, self.auditor)
+        services.guardar_medicion_los(self.conn, rid, "gel", {
+            "pruebas": [{"ayuda_luminosa": "PAPI", "tiempo_s": 20}]})
+        r = services.estado_modulos(self.conn, date(2026, 7, 2))
+        self.assertEqual(r["los"], services.ESTADO_VENCIDO)
+
+    def test_informes_verde_recien_con_el_mes_completo_y_los_obligatorios(self):
+        self._completar_obligatorios()
+        # Con los obligatorios cargados pero el mes a medio auditar sigue
+        # amarillo: emitir la liquidación ahora sería emitirla provisoria.
+        self.assertEqual(services.estado_modulos(self.conn, date(2026, 7, 15))["informes"],
+                         services.ESTADO_EN_PLAZO)
+
+        for dia in range(1, 32):
+            for turno in ("MANANA", "TARDE"):
+                c = self._control(dia, turno)
+                self._confirmar_todos(c)
+                services.cerrar_control(self.conn, c, self.auditor)
+        self.assertEqual(services.estado_modulos(self.conn, date(2026, 7, 31))["informes"],
+                         services.ESTADO_AL_DIA)
+
+    def test_el_semaforo_no_depende_del_rol(self):
+        """Hay datos que solo carga el admin, pero el auditor tiene que ver que
+        faltan: los ve en el resultado del mes de todos modos."""
+        import inspect
+        self.assertNotIn("es_admin",
+                         inspect.signature(services.estado_modulos).parameters)
+
+
 class TestNovedades(Base):
     """El centro de novedades se calcula al vuelo: no puede desfasarse."""
 

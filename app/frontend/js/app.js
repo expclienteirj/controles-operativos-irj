@@ -493,6 +493,28 @@ const App = (() => {
 
   /* =========================================================== inicio === */
 
+  /**
+   * Color de cada tarjeta de inicio, según lo que le falta al módulo para la
+   * liquidación del mes.
+   *
+   * Verde: nada pendiente. Amarillo: falta algo pero hay plazo. Rojo: falta
+   * algo y el plazo venció —la liquidación cierra el último día del mes—.
+   *
+   * Los cuatro colores estaban escritos a mano en el HTML y no miraban nada:
+   * Limpieza y LoS salían verdes aunque el mes tuviera dieciséis días sin
+   * auditar. Un semáforo que siempre da verde no es información, es adorno.
+   *
+   * Sin el dato (respuesta vieja en caché de una versión anterior) se cae a
+   * gris, que es lo honesto: no sabemos.
+   */
+  const CLASE_MODULO = {
+    AL_DIA: 'sin-novedades',
+    EN_PLAZO: 'con-desvios',
+    VENCIDO: 'total',
+  };
+  const claseModulo = (modulos, clave) =>
+    CLASE_MODULO[modulos && modulos[clave]] || 'pendiente';
+
   async function vistaInicio() {
     layout('Controles Operativos IRJ', usuario.nombre,
            '<div class="vacio">Cargando…</div>');
@@ -519,24 +541,26 @@ const App = (() => {
       ${tarjetaControlHoy(hoy)}
       ${bannerMes(hoy.mes, hoy.periodo)}
       <div class="grilla" style="margin-top:16px">
-        <button class="sector sin-novedades" data-ir="/limpieza">
+        <button class="sector ${claseModulo(hoy.modulos, 'limpieza')}"
+                data-ir="/limpieza">
           <span class="marca">🧹</span>
           <span class="nombre">Limpieza</span>
           <span class="detalle">Ver el historial diario del mes</span>
         </button>
-        <button class="sector sin-novedades" data-ir="/los">
+        <button class="sector ${claseModulo(hoy.modulos, 'los')}" data-ir="/los">
           <span class="marca">📋</span>
           <span class="nombre">Niveles de Servicio</span>
           <span class="detalle">11 ítems del manual LoS</span>
         </button>
-        <button class="sector pendiente" data-ir="/informes">
+        <button class="sector ${claseModulo(hoy.modulos, 'informes')}"
+                data-ir="/informes">
           <span class="marca">📄</span>
           <span class="nombre">Informes</span>
           <span class="detalle">PDF mensual y export de datos en CSV</span>
         </button>
         ${usuario.rol === 'admin' ? `
-          <button class="sector ${onboarding && !onboarding.terminado
-                                  ? 'con-desvios' : 'pendiente'}" data-ir="/config">
+          <button class="sector ${claseModulo(hoy.modulos, 'config')}"
+                  data-ir="/config">
             <span class="marca">⚙</span>
             <span class="nombre">Configuración del Aeropuerto</span>
             <span class="detalle">${onboarding && !onboarding.terminado

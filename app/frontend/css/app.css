@@ -206,6 +206,10 @@ button, .tocable { touch-action: manipulation; user-select: none; }
 .sector.sin-novedades .marca { background: var(--verde); }
 .sector.con-desvios { border-color: var(--amarillo); background: var(--amarillo-fondo); }
 .sector.con-desvios .marca { background: var(--amarillo); }
+/* Vencido: el plazo de la liquidación se terminó y quedó algo sin cargar.
+   Mismo rojo que ya usa .item.total para el día sin auditar. */
+.sector.total { border-color: var(--rojo); background: var(--rojo-fondo); }
+.sector.total .marca { background: var(--rojo); }
 
 /* -------------------------------------------------------------- botones -- */
 .btn {
