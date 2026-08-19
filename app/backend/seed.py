@@ -43,6 +43,11 @@ CONFIG = [
      "Exigir foto al registrar un desvío"),
     ("general", "periodicidad_control", "DIARIA",
      "El control de limpieza es diario: se exige uno por cada día del mes."),
+    ("general", "liquidacion_dia_inicio", 26,
+     "Día del mes en que arranca la preparación de la liquidación. Desde esa "
+     "fecha el semáforo de la pantalla de inicio dice si el mes está listo "
+     "para certificar; antes no opina, porque liquidar el día 8 no es una "
+     "tarea pendiente. Editable: es una fecha de proceso, no una constante."),
     ("general", "cobertura_minima_mes", calc.COBERTURA_MINIMA_DEFAULT,
      "Proporción mínima de días del mes que deben tener control cerrado para "
      "que el resultado se considere representativo. Por debajo de este valor "

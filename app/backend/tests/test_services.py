@@ -1415,88 +1415,113 @@ class TestCorreccionDeBajas(Base):
 
 
 class TestEstadoModulos(Base):
-    """Semáforo de las tarjetas de inicio. La regla que más se puede romper es
-    la del plazo: hasta el último día del mes un faltante es trabajo pendiente
-    (amarillo); ese día ya es una falta (rojo)."""
+    """Semáforo de las tarjetas de inicio. Binario y con ventana: gris hasta el
+    día en que arranca la liquidación, y desde ahí verde o rojo."""
 
-    def _completar_obligatorios(self):
+    def _todo_cargado(self):
+        """Deja el período con todo lo que la certificación exige."""
         self.conn.execute(
             "INSERT INTO periodo_datos (periodo, documentacion_verificada, "
             "ley_19587_verificada, horas_hombre_programadas, monto_adjudicado) "
             "VALUES (?,1,1,1000,500000)", (PERIODO,))
+        # Insumos del mes: sin stock relevado el ítem 5 queda sin datos.
+        for f in self.conn.execute("SELECT id FROM insumos WHERE activo = 1"):
+            self.conn.execute(
+                "INSERT INTO insumo_stock (periodo, insumo_id, stock) VALUES (?,?,?)",
+                (PERIODO, f["id"], 100))
+        # Inventario físico: mientras un bloque esté vacío su ítem LoS queda en
+        # "Requiere configuración", y eso también traba la liquidación.
+        self.conn.execute("INSERT INTO nucleos_sanitarios (nombre, tipo) "
+                          "VALUES ('Damas hall', 'DAMAS')")
+        self.conn.execute("INSERT INTO luminarias_sector (sector, cantidad) "
+                          "VALUES ('hall', 20)")
+        self.conn.execute("UPDATE asientos_preembarque SET instalados = 40 WHERE id = 1")
+        self.conn.execute("INSERT INTO puertas_embarque (nombre, php, instaladas) "
+                          "VALUES ('1', 76, 25)")
+        self.conn.execute("INSERT INTO secciones_pavimento (identificador, tipo) "
+                          "VALUES ('PISTA-01', 'PISTA')")
         self.conn.commit()
 
-    def test_lo_que_falta_a_mitad_de_mes_esta_en_plazo(self):
-        r = services.estado_modulos(self.conn, date(2026, 7, 15))
-        self.assertEqual(r["informes"], services.ESTADO_EN_PLAZO)
-        self.assertEqual(r["config"], services.ESTADO_EN_PLAZO)
-        self.assertFalse(r["vence_hoy"])
-
-    def test_lo_mismo_el_ultimo_dia_del_mes_ya_es_una_falta(self):
-        """La liquidación cierra el 31: lo que no esté cargado ese día no entra."""
-        r = services.estado_modulos(self.conn, date(2026, 7, 31))
-        self.assertTrue(r["vence_hoy"])
-        self.assertEqual(r["informes"], services.ESTADO_VENCIDO)
-        self.assertEqual(r["config"], services.ESTADO_VENCIDO)
-
-    def test_la_recorrida_del_dia_no_vence_con_el_mes(self):
-        """El 31 a la mañana quedan las mismas horas para recorrer que el 30:
-        marcarla vencida sería mentir en la dirección contraria."""
-        for dia in (30, 31):
-            r = services.estado_modulos(self.conn, date(2026, 7, dia))
-            self.assertEqual(r["limpieza"], services.ESTADO_EN_PLAZO,
-                             f"el {dia} la recorrida todavía está en plazo")
-
-    def test_la_recorrida_completa_del_ultimo_dia_queda_al_dia(self):
-        for turno in ("MANANA", "TARDE"):
-            c = self._control(31, turno)
-            self._confirmar_todos(c)
-            services.cerrar_control(self.conn, c, self.auditor)
-        r = services.estado_modulos(self.conn, date(2026, 7, 31))
-        self.assertEqual(r["limpieza"], services.ESTADO_AL_DIA)
-
-    def test_el_ultimo_dia_de_un_mes_de_30_tambien_vence(self):
-        r = services.estado_modulos(self.conn, date(2026, 6, 30))
-        self.assertTrue(r["vence_hoy"])
-
-    def test_limpieza_verde_solo_con_las_dos_recorridas_cerradas(self):
-        c = self._control(15, "MANANA")
-        self._confirmar_todos(c)
-        services.cerrar_control(self.conn, c, self.auditor)
-        # Con una sola no alcanza: se exigen dos por día.
-        self.assertEqual(services.estado_modulos(self.conn, date(2026, 7, 15))["limpieza"],
-                         services.ESTADO_EN_PLAZO)
-
-        c2 = self._control(15, "TARDE")
-        self._confirmar_todos(c2)
-        services.cerrar_control(self.conn, c2, self.auditor)
-        self.assertEqual(services.estado_modulos(self.conn, date(2026, 7, 15))["limpieza"],
-                         services.ESTADO_AL_DIA)
-
-    def test_un_item_de_los_que_no_cumple_es_rojo_aunque_haya_plazo(self):
-        """No es una carga pendiente sino un incumplimiento ya medido: el
-        calendario no lo mejora."""
-        rid = services.obtener_o_crear_relevamiento_los(
-            self.conn, PERIODO, self.auditor)
-        services.guardar_medicion_los(self.conn, rid, "gel", {
-            "pruebas": [{"ayuda_luminosa": "PAPI", "tiempo_s": 20}]})
-        r = services.estado_modulos(self.conn, date(2026, 7, 2))
-        self.assertEqual(r["los"], services.ESTADO_VENCIDO)
-
-    def test_informes_verde_recien_con_el_mes_completo_y_los_obligatorios(self):
-        self._completar_obligatorios()
-        # Con los obligatorios cargados pero el mes a medio auditar sigue
-        # amarillo: emitir la liquidación ahora sería emitirla provisoria.
-        self.assertEqual(services.estado_modulos(self.conn, date(2026, 7, 15))["informes"],
-                         services.ESTADO_EN_PLAZO)
-
-        for dia in range(1, 32):
+    def _auditar(self, dias):
+        for dia in dias:
             for turno in ("MANANA", "TARDE"):
                 c = self._control(dia, turno)
                 self._confirmar_todos(c)
                 services.cerrar_control(self.conn, c, self.auditor)
-        self.assertEqual(services.estado_modulos(self.conn, date(2026, 7, 31))["informes"],
-                         services.ESTADO_AL_DIA)
+
+    def test_antes_del_26_las_cuatro_estan_en_gris(self):
+        """Liquidar el día 8 no es una tarea pendiente: la pregunta no aplica."""
+        r = services.estado_modulos(self.conn, date(2026, 7, 25))
+        self.assertFalse(r["en_ventana"])
+        for modulo in ("limpieza", "los", "informes", "config"):
+            self.assertEqual(r[modulo], services.ESTADO_SIN_VENTANA, modulo)
+
+    def test_desde_el_26_el_semaforo_opina(self):
+        r = services.estado_modulos(self.conn, date(2026, 7, 26))
+        self.assertTrue(r["en_ventana"])
+        self.assertEqual(r["informes"], services.ESTADO_FALTANTE)
+
+    def test_el_dia_de_inicio_es_configurable(self):
+        db.set_config(self.conn, "liquidacion_dia_inicio", 10)
+        self.assertTrue(services.estado_modulos(self.conn, date(2026, 7, 10))["en_ventana"])
+        self.assertFalse(services.estado_modulos(self.conn, date(2026, 7, 9))["en_ventana"])
+
+    def test_no_hay_estado_intermedio(self):
+        """La liquidación es binaria: o están todos los datos o no están."""
+        posibles = set()
+        for dia in (25, 26, 31):
+            r = services.estado_modulos(self.conn, date(2026, 7, dia))
+            posibles.update(r[m] for m in ("limpieza", "los", "informes", "config"))
+        self.assertFalse(posibles - {services.ESTADO_SIN_VENTANA,
+                                     services.ESTADO_AL_DIA,
+                                     services.ESTADO_FALTANTE})
+
+    def test_el_verde_es_alcanzable_sin_haber_auditado_el_mes_perfecto(self):
+        """Con la regla de oro un día salteado no se recupera nunca. Si el
+        verde exigiera el mes completo, saltear una jornada lo dejaría fuera de
+        alcance para siempre y el semáforo solo podría estar en rojo."""
+        self._todo_cargado()
+        # 26 de 31 días: por encima del 80% mínimo, pero lejos del mes perfecto.
+        self._auditar(range(1, 27))
+        r = services.estado_modulos(self.conn, date(2026, 7, 26))
+        self.assertEqual(r["limpieza"], services.ESTADO_AL_DIA)
+        self.assertEqual(r["config"], services.ESTADO_AL_DIA)
+
+    def test_informes_tambien_espera_a_los(self):
+        """La pantalla emite los dos PDF, el de limpieza y el de LoS: con los
+        ítems del manual sin relevar, el informe del mes sale a medias."""
+        self._todo_cargado()
+        self._auditar(range(1, 27))
+        r = services.estado_modulos(self.conn, date(2026, 7, 26))
+        self.assertEqual(r["informes"], services.ESTADO_FALTANTE)
+
+    def test_la_cobertura_por_debajo_del_minimo_es_rojo(self):
+        self._todo_cargado()
+        self._auditar(range(1, 6))          # 5 de 31: 16%
+        r = services.estado_modulos(self.conn, date(2026, 7, 26))
+        self.assertEqual(r["limpieza"], services.ESTADO_FALTANTE)
+        self.assertEqual(r["informes"], services.ESTADO_FALTANTE)
+
+    def test_falta_el_monto_adjudicado_y_ya_es_rojo(self):
+        """Sin monto hay porcentaje pero no hay importe, que es lo único que el
+        contratista cobra."""
+        self._todo_cargado()
+        self._auditar(range(1, 27))
+        self.conn.execute(
+            "UPDATE periodo_datos SET monto_adjudicado = NULL WHERE periodo = ?",
+            (PERIODO,))
+        self.conn.commit()
+        r = services.estado_modulos(self.conn, date(2026, 7, 26))
+        self.assertEqual(r["config"], services.ESTADO_FALTANTE)
+        self.assertEqual(r["informes"], services.ESTADO_FALTANTE)
+
+    def test_la_recorrida_de_hoy_no_cuenta_como_faltante(self):
+        """El 27 a la mañana quedan las horas del día para recorrer: exigirla ya
+        sería marcar como falta algo que todavía está en plazo."""
+        self._todo_cargado()
+        self._auditar(range(1, 27))         # hasta el 26; el 27 sin tocar
+        r = services.estado_modulos(self.conn, date(2026, 7, 27))
+        self.assertEqual(r["limpieza"], services.ESTADO_AL_DIA)
 
     def test_el_semaforo_no_depende_del_rol(self):
         """Hay datos que solo carga el admin, pero el auditor tiene que ver que

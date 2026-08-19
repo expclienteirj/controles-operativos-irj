@@ -42,6 +42,16 @@ def _entero_positivo(valor, clave, minimo=1):
     return valor
 
 
+def _dia_del_mes(valor, clave):
+    """Día que existe en todos los meses, febrero incluido."""
+    v = _entero_positivo(valor, clave)
+    if v > 28:
+        raise ErrorValidacion(
+            f"'{clave}' debe estar entre 1 y 28 (recibido: {v}). Un día 29, 30 "
+            "o 31 dejaría a febrero sin ventana en los años no bisiestos.")
+    return v
+
+
 def _booleano(valor, clave):
     if not isinstance(valor, bool):
         raise ErrorValidacion(f"'{clave}' debe ser verdadero o falso")
@@ -214,6 +224,9 @@ VALIDADORES = {
     "foto_obligatoria_desvio": _booleano,
     "periodicidad_control": _texto,
     "cobertura_minima_mes": _proporcion,
+    # Se corta en 28 a propósito: un 29, 30 o 31 dejaría a febrero sin ventana
+    # de liquidación en los años no bisiestos.
+    "liquidacion_dia_inicio": _dia_del_mes,
 
     # LoS
     "banos_objetivo_nucleo": _objetivos_nucleo,

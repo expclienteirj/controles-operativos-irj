@@ -494,23 +494,28 @@ const App = (() => {
   /* =========================================================== inicio === */
 
   /**
-   * Color de cada tarjeta de inicio, según lo que le falta al módulo para la
-   * liquidación del mes.
+   * Color de cada tarjeta de inicio, según si el mes está listo para liquidar.
    *
-   * Verde: nada pendiente. Amarillo: falta algo pero hay plazo. Rojo: falta
-   * algo y el plazo venció —la liquidación cierra el último día del mes—.
+   * Verde o rojo, sin punto medio: la liquidación es binaria. Falta cualquier
+   * dato y la certificación no sale más baja, no sale —o su peso se
+   * redistribuye y mueve el importe—. Un amarillo intermedio sugeriría un
+   * margen que no existe.
+   *
+   * Gris hasta el día en que arranca la liquidación (26 por defecto,
+   * configurable): antes de esa fecha la pregunta no aplica, y un semáforo
+   * encendido veinticinco días seguidos se vuelve paisaje.
    *
    * Los cuatro colores estaban escritos a mano en el HTML y no miraban nada:
    * Limpieza y LoS salían verdes aunque el mes tuviera dieciséis días sin
    * auditar. Un semáforo que siempre da verde no es información, es adorno.
    *
-   * Sin el dato (respuesta vieja en caché de una versión anterior) se cae a
-   * gris, que es lo honesto: no sabemos.
+   * Sin el dato (respuesta vieja en caché de una versión anterior) también cae
+   * a gris, que es lo honesto: no sabemos.
    */
   const CLASE_MODULO = {
     AL_DIA: 'sin-novedades',
-    EN_PLAZO: 'con-desvios',
-    VENCIDO: 'total',
+    FALTANTE: 'total',
+    SIN_VENTANA: 'pendiente',
   };
   const claseModulo = (modulos, clave) =>
     CLASE_MODULO[modulos && modulos[clave]] || 'pendiente';
