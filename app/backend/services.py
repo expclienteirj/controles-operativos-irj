@@ -817,10 +817,19 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
         return ESTADO_VENCIDO if vencido else ESTADO_EN_PLAZO
 
     # -- Limpieza: las dos recorridas exigidas del día ----------------------
+    #
+    # Único módulo que NO usa el plazo del mes: una recorrida vence al final de
+    # su propio día. El 31 a las nueve de la mañana quedan las mismas catorce
+    # horas para hacerla que el 30, así que pintarla vencida sería mentir en la
+    # dirección contraria a la que se está corrigiendo. Por eso nunca llega a
+    # rojo: mientras el día no termine siempre se está en plazo, y cuando
+    # termina el faltante se convierte en un día vencido sin control, que ya se
+    # informa en el banner del mes y en las novedades.
     cerrados_hoy = {f["turno"] for f in conn.execute(
         "SELECT turno FROM controles_limpieza WHERE fecha = ? AND estado = 'CERRADO'",
         (hoy.isoformat(),))}
-    limpieza = semaforo(len(cerrados_hoy) < len(calc.TURNOS))
+    limpieza = (ESTADO_AL_DIA if len(cerrados_hoy) >= len(calc.TURNOS)
+                else ESTADO_EN_PLAZO)
 
     # -- Niveles de servicio ------------------------------------------------
     # Un ítem que no cumple es rojo sin importar el día: no es una carga

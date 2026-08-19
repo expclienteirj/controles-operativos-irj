@@ -1439,6 +1439,22 @@ class TestEstadoModulos(Base):
         self.assertEqual(r["informes"], services.ESTADO_VENCIDO)
         self.assertEqual(r["config"], services.ESTADO_VENCIDO)
 
+    def test_la_recorrida_del_dia_no_vence_con_el_mes(self):
+        """El 31 a la mañana quedan las mismas horas para recorrer que el 30:
+        marcarla vencida sería mentir en la dirección contraria."""
+        for dia in (30, 31):
+            r = services.estado_modulos(self.conn, date(2026, 7, dia))
+            self.assertEqual(r["limpieza"], services.ESTADO_EN_PLAZO,
+                             f"el {dia} la recorrida todavía está en plazo")
+
+    def test_la_recorrida_completa_del_ultimo_dia_queda_al_dia(self):
+        for turno in ("MANANA", "TARDE"):
+            c = self._control(31, turno)
+            self._confirmar_todos(c)
+            services.cerrar_control(self.conn, c, self.auditor)
+        r = services.estado_modulos(self.conn, date(2026, 7, 31))
+        self.assertEqual(r["limpieza"], services.ESTADO_AL_DIA)
+
     def test_el_ultimo_dia_de_un_mes_de_30_tambien_vence(self):
         r = services.estado_modulos(self.conn, date(2026, 6, 30))
         self.assertTrue(r["vence_hoy"])
