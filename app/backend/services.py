@@ -2038,6 +2038,28 @@ DIAS_NC_DEMORADA = 7
 CRITICIDAD_ALTA = "ALTA"
 CRITICIDAD_MEDIA = "MEDIA"
 
+# Qué puede HACER el auditor con una novedad. Es el dato que decide qué botón
+# ofrece la pantalla, y por eso lo resuelve el servidor: es el único que sabe
+# si el caso todavía admite una acción o ya es un hecho consumado.
+#
+#   RESOLVER_NC     cerrar no conformidades, ahí mismo, sin navegar.
+#   ALTA_MAQUINA    registrar la reposición de una máquina de baja.
+#   INICIAR_TURNO   abrir una recorrida que todavía está en plazo (solo hoy).
+#   IR              no hay acción directa, pero sí un lugar concreto que mirar.
+#   None            no hay nada que hacer: informativo puro.
+#
+# `None` es una respuesta legítima y frecuente. Un día pasado sin control no se
+# puede recuperar —ni el admin puede—, así que ofrecer un botón sería prometer
+# una consecuencia que no existe: el auditor lo aprieta, no pasa nada, y deja
+# de creerle al resto de las novedades.
+ACCION_RESOLVER_NC = "RESOLVER_NC"
+ACCION_ALTA_MAQUINA = "ALTA_MAQUINA"
+ACCION_INICIAR_TURNO = "INICIAR_TURNO"
+ACCION_IR = "IR"
+
+# Para redactar la novedad del turno que falta, no para la interfaz.
+NOMBRE_TURNO = {"MANANA": "la mañana", "TARDE": "la tarde"}
+
 
 def novedades(conn: sqlite3.Connection, hoy: date | None = None,
               es_admin: bool = False) -> dict:
@@ -2049,15 +2071,24 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
 
     Las novedades vienen agregadas, no una por hallazgo: con 19 no
     conformidades abiertas, una notificación por cada una es ruido que se
-    aprende a ignorar. Cada entrada dice cuántos casos agrupa y a dónde ir.
+    aprende a ignorar. Cada entrada dice cuántos casos agrupa y qué se puede
+    hacer con ellos.
+
+    Cada novedad viaja con una `accion` (ver las constantes ACCION_*) y los
+    `datos` que esa acción necesita para ejecutarse sin volver a preguntarle
+    nada al servidor. Antes todas llevaban una ruta de sección y la pantalla
+    ofrecía un "Ir" idéntico para las nueve: la mitad terminaba en un listado
+    donde el caso concreto no aparecía por ningún lado.
     """
     hoy = hoy or date.today()
     periodo = hoy.strftime("%Y-%m")
     lista = []
 
-    def agregar(clave, criticidad, titulo, detalle, ruta, cantidad=1):
+    def agregar(clave, criticidad, titulo, detalle, ruta=None, cantidad=1,
+                accion=None, datos=None):
         lista.append({"clave": clave, "criticidad": criticidad, "titulo": titulo,
-                      "detalle": detalle, "ruta": ruta, "cantidad": cantidad})
+                      "detalle": detalle, "ruta": ruta, "cantidad": cantidad,
+                      "accion": accion, "datos": datos or {}})
 
     # -- no conformidades sin resolver ------------------------------------
     # Se incluyen las de HOY: una no conformidad que cargó el turno mañana es
@@ -2072,47 +2103,84 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
     inmediatas = [p for p in resto if p["prioridad"] == "INMEDIATA"]
     programadas = [p for p in resto if p not in inmediatas]
 
+    # Las tres viajan con sus no conformidades adentro: la acción es cerrarlas
+    # y eso se hace en la misma hoja, sin navegar a ningún lado. Mandarlas a
+    # /limpieza era dejar al auditor en el listado de días, que no menciona las
+    # no conformidades por ninguna parte.
     if demoradas:
         peor = max(p["dias_pendiente"] for p in demoradas)
         agregar("nc_demoradas", CRITICIDAD_ALTA,
                 f"{len(demoradas)} no conformidad(es) demorada(s)",
                 f"Sin resolver hace {peor} días o más. Verificalas en recorrida.",
-                "/limpieza", len(demoradas))
+                cantidad=len(demoradas), accion=ACCION_RESOLVER_NC,
+                datos={"no_conformidades": demoradas})
     if inmediatas:
         agregar("nc_inmediatas", CRITICIDAD_ALTA,
                 f"{len(inmediatas)} no conformidad(es) de resolución inmediata",
                 f"{inmediatas[0]['sector'] or inmediatas[0]['origen']}: "
-                f"{inmediatas[0]['descripcion']}", "/limpieza", len(inmediatas))
+                f"{inmediatas[0]['descripcion']}",
+                cantidad=len(inmediatas), accion=ACCION_RESOLVER_NC,
+                datos={"no_conformidades": inmediatas})
     if programadas:
         agregar("nc_pendientes", CRITICIDAD_MEDIA,
                 f"{len(programadas)} no conformidad(es) sin resolver",
-                "De resolución programada.", "/limpieza", len(programadas))
+                "De resolución programada.",
+                cantidad=len(programadas), accion=ACCION_RESOLVER_NC,
+                datos={"no_conformidades": programadas})
 
     # -- plan de auditoría --------------------------------------------------
     mes = completitud_periodo(conn, periodo, hoy)
     vencidos = mes["dias_vencidos_sin_control"]
     if vencidos:
-        agregar("dias_sin_control", CRITICIDAD_ALTA,
+        # Sin acción y sin botón: desde que rige la regla de oro, un día pasado
+        # no admite control nuevo ni siquiera para un administrador. Es material
+        # para el informe del mes, no una tarea. Por eso tampoco es crítico: si
+        # lo fuera, la cuenta de "críticas" mezclaría lo que hay que hacer hoy
+        # con lo que ya no tiene arreglo, y se aprendería a ignorar el número.
+        agregar("dias_sin_control", CRITICIDAD_MEDIA,
                 f"{len(vencidos)} día(s) sin ningún control",
-                f"El último fue el {vencidos[-1]}. No computan ni penalizan, "
-                "pero bajan la representatividad del mes.",
-                "/limpieza", len(vencidos))
+                f"El último fue el {vencidos[-1]}. Ya no se pueden cargar: la "
+                "recorrida que no se hizo queda como no hecha. No penalizan al "
+                "contratista, pero bajan la representatividad del mes.",
+                cantidad=len(vencidos))
+
+    # Los controles de hoy, para no ofrecer iniciar un turno que ya existe: el
+    # servidor lo rechazaría con un 409 y el botón volvería a ser una promesa
+    # incumplida, que es justamente lo que se está corrigiendo.
+    controles_hoy = {f["turno"] for f in conn.execute(
+        "SELECT turno FROM controles_limpieza WHERE fecha = ?", (hoy.isoformat(),))}
 
     parciales = mes["turnos"]["dias_parciales"]
-    if parciales:
-        # A limpieza y no a la pantalla de inicio: el centro de novedades se
-        # abre casi siempre desde inicio, así que mandar ahí era repintar la
-        # pantalla donde el auditor ya estaba y el botón parecía muerto. En
-        # limpieza está el listado de días por turno, que es donde se actúa.
+    pasados = [p for p in parciales if p["fecha"] < hoy.isoformat()]
+    de_hoy = next((p for p in parciales if p["fecha"] == hoy.isoformat()), None)
+
+    if pasados:
         agregar("turnos_faltantes", CRITICIDAD_MEDIA,
-                f"{len(parciales)} día(s) con una sola recorrida",
-                "Se exigen dos controles diarios.", "/limpieza", len(parciales))
+                f"{len(pasados)} día(s) con una sola recorrida",
+                "Se exigen dos controles diarios. El turno que no se hizo ya no "
+                "se puede cargar.", cantidad=len(pasados))
+
+    # La única parte del plan de auditoría que todavía se puede cumplir: la
+    # segunda recorrida de hoy. Se ofrece solo si ese turno no existe: si está
+    # abierto sin cerrar no es un faltante sino trabajo en curso, y la pantalla
+    # de inicio ya lo viene ofreciendo como acción principal.
+    if de_hoy:
+        falta = next((t for t in de_hoy["faltan"] if t not in controles_hoy), None)
+        if falta:
+            agregar("turno_hoy", CRITICIDAD_MEDIA,
+                    f"Falta la recorrida de {NOMBRE_TURNO[falta]} de hoy",
+                    "Se exigen dos recorridas diarias. Esta todavía está en plazo.",
+                    cantidad=1, accion=ACCION_INICIAR_TURNO,
+                    datos={"fecha": hoy.isoformat(), "turno": falta})
 
     if mes["cobertura"] is not None and not mes["cobertura_suficiente"]:
+        # Tampoco tiene botón: es la consecuencia agregada de los días que ya
+        # se perdieron, no algo que se pueda ir a arreglar a una pantalla.
         agregar("cobertura", CRITICIDAD_MEDIA,
                 f"Cobertura del mes en {round(mes['cobertura'] * 100)}%",
                 f"Por debajo del mínimo esperado "
-                f"({round(mes['cobertura_minima'] * 100)}%).", "/limpieza")
+                f"({round(mes['cobertura_minima'] * 100)}%). Se recupera "
+                f"auditando los días que quedan del mes.")
 
     # -- maquinaria fuera de servicio ---------------------------------------
     # Solo las bajas sin reposición: son las que siguen descontando del ítem 4
@@ -2136,26 +2204,35 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
 
     if fuera:
         dias = (hoy - date.fromisoformat(fuera[0]["desde"])).days
+        # Viaja con las bajas adentro para poder registrar la reposición sin
+        # navegar. Las marcas del modelo viejo no tienen fila en
+        # `equipamiento_baja` y por lo tanto no tienen id: se listan igual —son
+        # una máquina realmente fuera de servicio— pero sin botón de alta,
+        # porque no hay nada que cerrar por esa vía.
         agregar("maquinaria_baja", CRITICIDAD_ALTA,
                 f"{len(fuera)} máquina(s) fuera de servicio",
                 f"{fuera[0]['equipo']}" + (f" lleva {dias} día(s) de baja."
                                            if dias else " desde hoy.")
-                # Tampoco a inicio: el equipamiento se ve y se da de alta desde
-                # el control diario, y a él se llega por limpieza. `/config` no
-                # sirve como destino porque es solo de admin y a un auditor lo
-                # rebota a inicio, que es el problema que se está corrigiendo.
-                + " Descuenta del importe a certificar.", "/limpieza", len(fuera))
+                + " Descuenta del importe a certificar.",
+                cantidad=len(fuera), accion=ACCION_ALTA_MAQUINA,
+                datos={"bajas": [{"id": f.get("id"), "equipo": f["equipo"],
+                                  "desde": f["desde"]} for f in fuera]})
 
     # -- niveles de servicio -------------------------------------------------
     try:
         dash = dashboard_los(conn, periodo)
         incumplen = [i for i in dash["items"] if i["estado"] == "NO_CUMPLE"]
         if incumplen:
+            # Con un solo ítem se entra directo a él; con varios, al tablero,
+            # que es donde se ven los once con su estado. Elegir uno de tres
+            # sería arbitrario y escondería los otros dos.
+            ruta = (f"/los/{incumplen[0]['clave']}" if len(incumplen) == 1
+                    else "/los")
             agregar("los_no_cumple", CRITICIDAD_ALTA,
                     f"{len(incumplen)} ítem(s) de LoS no cumplen",
                     ", ".join(i["nombre"] for i in incumplen[:3])
                     + ("…" if len(incumplen) > 3 else ""),
-                    "/los", len(incumplen))
+                    ruta, len(incumplen), accion=ACCION_IR)
     except Exception:
         # Una falla evaluando LoS no puede dejar sin novedades al resto.
         pass
@@ -2164,10 +2241,12 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
     if es_admin:
         pendiente_inv = db.inventario_pendiente(conn)
         if pendiente_inv:
+            # A la pestaña de inventario, no a la raíz de configuración: es la
+            # única de las cuatro donde está lo que falta cargar.
             agregar("inventario", CRITICIDAD_MEDIA,
                     f"{len(pendiente_inv)} ítem(s) sin inventario cargado",
                     "No se pueden relevar y quedan como Sin datos.",
-                    "/config", len(pendiente_inv))
+                    "/config/inventario", len(pendiente_inv), accion=ACCION_IR)
 
     orden = {CRITICIDAD_ALTA: 0, CRITICIDAD_MEDIA: 1}
     lista.sort(key=lambda n: orden[n["criticidad"]])

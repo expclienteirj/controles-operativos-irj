@@ -1505,6 +1505,96 @@ class TestNovedades(Base):
         self.assertIn("inventario", claves(True))
         self.assertNotIn("inventario", claves(False))
 
+    def test_las_nc_viajan_con_la_novedad_para_resolverse_sin_navegar(self):
+        """La acción de una NC pendiente es cerrarla, y eso se hace en la misma
+        hoja: si la novedad no trajera las NC, el botón tendría que mandar al
+        listado de días, donde no se las menciona."""
+        c = self._control(1)
+        services.registrar_desvio(self.conn, c, self._item("sanidad"),
+                                  "DESVIO_TOTAL", "Piso sucio", self.auditor)
+        r = services.novedades(self.conn, date(2026, 7, 20))
+        nov = next(n for n in r["novedades"] if n["clave"] == "nc_demoradas")
+        self.assertEqual(nov["accion"], services.ACCION_RESOLVER_NC)
+        self.assertEqual(len(nov["datos"]["no_conformidades"]), 1)
+        self.assertEqual(nov["datos"]["no_conformidades"][0]["descripcion"],
+                         "Piso sucio")
+
+    def test_un_dia_perdido_no_ofrece_ninguna_accion(self):
+        """No se puede abrir el control de un día pasado ni siendo admin, así
+        que un botón ahí prometería una consecuencia inexistente."""
+        self._cerrar_dia(1, "MANANA")
+        self._cerrar_dia(1, "TARDE")
+        r = services.novedades(self.conn, date(2026, 7, 5))
+        nov = next(n for n in r["novedades"] if n["clave"] == "dias_sin_control")
+        self.assertIsNone(nov["accion"])
+        self.assertIsNone(nov["ruta"])
+        # Tampoco es crítica: la cuenta de críticas es lo que hay que hacer hoy.
+        self.assertEqual(nov["criticidad"], services.CRITICIDAD_MEDIA)
+
+    def test_la_cobertura_baja_es_informativa_y_no_tiene_boton(self):
+        self._cerrar_dia(1, "MANANA")
+        r = services.novedades(self.conn, date(2026, 7, 20))
+        nov = next(n for n in r["novedades"] if n["clave"] == "cobertura")
+        self.assertIsNone(nov["accion"])
+
+    def test_el_turno_que_falta_hoy_se_puede_iniciar(self):
+        """Lo único del plan de auditoría que todavía se puede cumplir."""
+        self._cerrar_dia(3, "MANANA")
+        r = services.novedades(self.conn, date(2026, 7, 3))
+        nov = next(n for n in r["novedades"] if n["clave"] == "turno_hoy")
+        self.assertEqual(nov["accion"], services.ACCION_INICIAR_TURNO)
+        self.assertEqual(nov["datos"], {"fecha": "2026-07-03", "turno": "TARDE"})
+
+    def test_un_turno_de_hoy_ya_abierto_no_se_ofrece_iniciar(self):
+        """Existe pero sin cerrar: `POST /api/controles` daría 409, así que el
+        botón fallaría. Es trabajo en curso, no un faltante."""
+        self._cerrar_dia(3, "MANANA")
+        self._control(3, "TARDE")          # abierto, sin cerrar
+        r = services.novedades(self.conn, date(2026, 7, 3))
+        self.assertNotIn("turno_hoy", [n["clave"] for n in r["novedades"]])
+
+    def test_la_maquina_de_baja_viaja_con_su_id_para_darla_de_alta(self):
+        equipo = self.conn.execute(
+            "SELECT id FROM equipamiento_limpieza LIMIT 1").fetchone()["id"]
+        bid = services.registrar_baja_equipo(
+            self.conn, equipo, "2026-07-05", None, "Motor quemado",
+            self.auditor)["baja_id"]
+        r = services.novedades(self.conn, date(2026, 7, 12))
+        nov = next(n for n in r["novedades"] if n["clave"] == "maquinaria_baja")
+        self.assertEqual(nov["accion"], services.ACCION_ALTA_MAQUINA)
+        self.assertEqual([b["id"] for b in nov["datos"]["bajas"]], [bid])
+
+    def test_un_unico_item_de_los_lleva_directo_a_ese_item(self):
+        """Con uno solo no hay ambigüedad: entrar al tablero obligaría a
+        buscarlo entre los once."""
+        rid = services.obtener_o_crear_relevamiento_los(
+            self.conn, "2026-07", self.auditor)
+        services.guardar_medicion_los(self.conn, rid, "gel", {
+            "pruebas": [{"ayuda_luminosa": "PAPI", "tiempo_s": 20}]})
+        r = services.novedades(self.conn, date(2026, 7, 12))
+        nov = next(n for n in r["novedades"] if n["clave"] == "los_no_cumple")
+        self.assertEqual(nov["accion"], services.ACCION_IR)
+        self.assertEqual(nov["ruta"], "/los/gel")
+
+    def test_varios_items_de_los_llevan_al_tablero(self):
+        """Elegir uno de tres sería arbitrario y escondería los otros dos."""
+        rid = services.obtener_o_crear_relevamiento_los(
+            self.conn, "2026-07", self.auditor)
+        services.guardar_medicion_los(self.conn, rid, "gel", {
+            "pruebas": [{"ayuda_luminosa": "PAPI", "tiempo_s": 20}]})
+        services.guardar_medicion_los(self.conn, rid, "infraestructura",
+                                      {"subitems": {"vidrios": "D"}},
+                                      fecha="2026-07-05")
+        r = services.novedades(self.conn, date(2026, 7, 12))
+        nov = next(n for n in r["novedades"] if n["clave"] == "los_no_cumple")
+        self.assertEqual(nov["cantidad"], 2)
+        self.assertEqual(nov["ruta"], "/los")
+
+    def test_el_inventario_pendiente_lleva_a_su_pestana(self):
+        r = services.novedades(self.conn, date(2026, 7, 2), es_admin=True)
+        nov = next(n for n in r["novedades"] if n["clave"] == "inventario")
+        self.assertEqual(nov["ruta"], "/config/inventario")
+
     def test_las_criticas_van_primero(self):
         c = self._control(1)
         services.registrar_desvio(self.conn, c, self._item("sanidad"),

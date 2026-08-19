@@ -20,7 +20,13 @@ const LoS = (() => {
 
   /* ======================================================== dashboard === */
 
-  async function vista(layout, ir) {
+  /**
+   * `itemClave` (opcional) es el ítem al que hay que entrar directamente, y
+   * llega por la ruta (#/los/pista_rodajes). Lo usa el centro de novedades
+   * cuando hay un único ítem incumpliendo: dejar al auditor en el tablero lo
+   * obligaba a buscar a ojo cuál de los once era el que lo trajo hasta acá.
+   */
+  async function vista(layout, ir, itemClave) {
     periodo = UI.periodoActual();
     layout('Niveles de Servicio', UI.nombrePeriodo(periodo),
            '<div class="vacio">Cargando…</div>', { volver: '/' });
@@ -35,6 +41,14 @@ const LoS = (() => {
       mediciones = actual.mediciones || {};
       items = listaItems.items;
       pintarDashboard(dash, layout, ir);
+      // El tablero ya pintó sus botones, así que alcanza con accionar el del
+      // ítem pedido: hereda tal cual su comportamiento (solo lectura, inerte,
+      // hoja de carga) sin duplicar acá ninguna de esas reglas.
+      if (itemClave) {
+        const boton = Array.from(document.querySelectorAll('[data-item]'))
+          .find((b) => b.dataset.item === itemClave);
+        if (boton) boton.click();
+      }
     } catch (e) {
       $('.contenido').innerHTML =
         `<div class="aviso error">No se pudo cargar: ${UI.esc(e.message)}</div>`;

@@ -7,6 +7,11 @@
 
 const Config = (() => {
   let pestana = 'general';
+
+  // Las cuatro pestañas, en una sola lista: la pinta la vista y la valida el
+  // ruteo por pestaña (#/config/inventario).
+  const PESTANAS = [['general', 'Generales'], ['inventario', 'Inventario'],
+                    ['parametros', 'Parámetros'], ['periodo', 'Período']];
   let onboarding = null;
 
   const $ = (sel) => document.querySelector(sel);
@@ -101,7 +106,18 @@ const Config = (() => {
 
   /* ==================================================== vista principal === */
 
-  async function vista(layout, ir) {
+  /**
+   * `tab` (opcional) llega por la ruta (#/config/inventario) y abre esa
+   * pestaña en vez de la que quedó de la última visita. Lo usa la novedad de
+   * inventario sin cargar, que antes dejaba al admin en "Generales" y con las
+   * cuatro pestañas para revisar a mano.
+   *
+   * Se ignora un valor desconocido en lugar de fallar: la ruta la escribe el
+   * usuario en la barra de direcciones tanto como la app.
+   */
+  async function vista(layout, ir, tab) {
+    if (tab && PESTANAS.some(([id]) => id === tab)) pestana = tab;
+
     layout('Configuración del Aeropuerto', 'IRJ — categoría G5',
            '<div class="vacio">Cargando…</div>', { volver: '/' });
 
@@ -115,8 +131,7 @@ const Config = (() => {
     $('.contenido').innerHTML = `
       ${bannerOnboarding()}
       <div class="pestanas" id="pestanas">
-        ${[['general', 'Generales'], ['inventario', 'Inventario'],
-           ['parametros', 'Parámetros'], ['periodo', 'Período']]
+        ${PESTANAS
           .map(([id, txt]) => `<button class="pestana ${pestana === id ? 'activa' : ''}"
                                  data-tab="${id}">${txt}</button>`).join('')}
       </div>

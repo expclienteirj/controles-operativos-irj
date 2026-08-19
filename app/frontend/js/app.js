@@ -100,14 +100,18 @@ const App = (() => {
       return vistaSector(control ? control.id : null, arg);
     }
     if (seccion === 'limpieza') return vistaLimpieza();
-    if (seccion === 'los') return LoS.vista(layout, ir);
+    // El argumento es el destino puntual dentro de la sección: el ítem de LoS
+    // (#/los/pista_rodajes) o la pestaña de configuración (#/config/inventario).
+    // Sin esto, una novedad solo podía dejar al auditor en la puerta de la
+    // sección y hacerle buscar a ojo el caso que la generó.
+    if (seccion === 'los') return LoS.vista(layout, ir, arg);
     if (seccion === 'informes') return Informes.vista(layout, ir);
     if (seccion === 'config') {
       if (usuario.rol !== 'admin') {
         UI.toast('La configuración es solo para administradores', 'error');
         return ir('/');
       }
-      return Config.vista(layout, ir);
+      return Config.vista(layout, ir, arg);
     }
     return vistaInicio();
   }
@@ -269,17 +273,36 @@ const App = (() => {
       `${_novedades.total} novedad(es), ${_novedades.criticas} crítica(s)`);
   }
 
+  /**
+   * Qué dice el botón de cada novedad, según la acción que el servidor declaró.
+   *
+   * Una novedad sin acción no lleva botón. Es a propósito: un día pasado sin
+   * control no se puede recuperar ni siendo admin, así que ofrecer "Ir" era
+   * prometer una consecuencia inexistente — y en el peor caso terminaba en la
+   * pantalla de limpieza apretando "Iniciar" para comerse un error del
+   * servidor. Sin botón, la novedad dice lo que es: un dato del mes.
+   */
+  const ACCION_NOVEDAD = {
+    RESOLVER_NC: 'Resolver',
+    ALTA_MAQUINA: 'Dar de alta',
+    INICIAR_TURNO: 'Iniciar',
+    IR: 'Ir',
+  };
+
   function hojaNovedades() {
     const n = _novedades;
     if (!n || !n.total) return UI.toast('No hay novedades', '');
 
-    const fila = (x) => `
+    const fila = (x, i) => `
       <div class="item-pendiente${x.criticidad === 'ALTA' ? ' demorada' : ''}">
         <div class="texto">
           <span class="nombre-item">${UI.esc(x.titulo)}</span>
           <span class="obs">${UI.esc(x.detalle)}</span>
         </div>
-        <button class="btn-texto" data-ir-novedad="${UI.esc(x.ruta)}">Ir</button>
+        ${ACCION_NOVEDAD[x.accion]
+          ? `<button class="btn-texto" data-novedad="${i}">
+               ${ACCION_NOVEDAD[x.accion]}</button>`
+          : ''}
       </div>`;
 
     UI.abrirHoja(`
@@ -291,9 +314,113 @@ const App = (() => {
         <button class="btn" data-cerrar>Cerrar</button>
       </div>`, (hoja, cerrar) => {
       hoja.querySelector('[data-cerrar]').onclick = cerrar;
-      hoja.querySelectorAll('[data-ir-novedad]').forEach((b) => {
-        b.onclick = () => { UI.cerrarParaNavegar(); ir(b.dataset.irNovedad); };
+      hoja.querySelectorAll('[data-novedad]').forEach((b) => {
+        b.onclick = () => accionarNovedad(n.novedades[Number(b.dataset.novedad)]);
       });
+    });
+  }
+
+  /**
+   * Ejecuta lo que la novedad declara que se puede hacer.
+   *
+   * Las dos primeras resuelven en el lugar, apilando una hoja sobre el centro
+   * de novedades: el caso concreto ya viajó en la novedad, así que no hay nada
+   * que ir a buscar a otra pantalla. Navegar queda para cuando el trabajo
+   * realmente vive en otro lado.
+   */
+  function accionarNovedad(x) {
+    const d = x.datos || {};
+    switch (x.accion) {
+      case 'RESOLVER_NC':
+        // Sin control: la no conformidad se cierra por su propio id y no
+        // depende de ninguna recorrida abierta.
+        return hojaPendientes(d.no_conformidades, null, false);
+      case 'ALTA_MAQUINA':
+        return hojaMaquinasDeBaja(d.bajas || []);
+      case 'INICIAR_TURNO':
+        UI.cerrarParaNavegar();
+        return crearControl(d.fecha, d.turno);
+      case 'IR':
+        UI.cerrarParaNavegar();
+        return ir(x.ruta);
+      default:
+        return undefined;
+    }
+  }
+
+  /**
+   * Máquinas sin reposición, para darlas de alta sin salir de novedades.
+   *
+   * Las marcadas por el modelo viejo llegan sin id de baja: se listan igual
+   * —están realmente fuera de servicio— pero sin botón, porque no hay tramo
+   * que cerrar. Mostrarlas con un botón que no puede funcionar sería repetir
+   * el problema que este cambio corrige.
+   */
+  function hojaMaquinasDeBaja(bajas) {
+    const fila = (b, i) => `
+      <div class="item-pendiente">
+        <div class="texto">
+          <span class="nombre-item">${UI.esc(b.equipo)}</span>
+          <span class="obs">${b.id ? `De baja desde ${UI.esc(b.desde)}`
+                                   : `Marcada el ${UI.esc(b.desde)} — se repone `
+                                     + 'desde el control del día'}</span>
+        </div>
+        ${b.id ? `<button class="btn-texto" data-alta="${i}">Dar de alta</button>`
+               : ''}
+      </div>`;
+
+    UI.abrirHoja(`
+      <h3>Máquinas fuera de servicio</h3>
+      <p class="sub">${bajas.length} sin reposición registrada</p>
+      <div class="aviso info">
+        Cada día de baja descuenta del ítem 4 de la certificación. Registrala el
+        día en que la máquina volvió a estar disponible, no el de hoy si ya
+        estaba funcionando antes.
+      </div>
+      <div class="lista-pendientes">${bajas.map(fila).join('')}</div>
+      <div class="acciones">
+        <button class="btn" data-cerrar>Cerrar</button>
+      </div>`, (hoja, cerrar) => {
+      hoja.querySelector('[data-cerrar]').onclick = cerrar;
+      hoja.querySelectorAll('[data-alta]').forEach((b) => {
+        b.onclick = () => hojaAltaMaquina(bajas[Number(b.dataset.alta)]);
+      });
+    });
+  }
+
+  /** Reposición de una máquina desde novedades, sin control abierto. */
+  function hojaAltaMaquina(baja) {
+    UI.abrirHoja(`
+      <h3>Dar de alta ${UI.esc(baja.equipo)}</h3>
+      <p class="sub">De baja desde ${UI.esc(baja.desde)}</p>
+      <div class="campo">
+        <label for="alta-hasta">Último día fuera de servicio
+          <span class="ayuda">El día siguiente ya cuenta como disponible</span></label>
+        <input type="date" id="alta-hasta" value="${UI.esc(UI.hoyISO())}">
+      </div>
+      <div class="acciones">
+        <button class="btn" data-cancelar>Cancelar</button>
+        <button class="btn btn-verde" data-guardar>Marcar disponible</button>
+      </div>`, (hoja, cerrar) => {
+      hoja.querySelector('[data-cancelar]').onclick = cerrar;
+      hoja.querySelector('[data-guardar]').onclick = async () => {
+        const hasta = hoja.querySelector('#alta-hasta').value;
+        if (!hasta) return UI.toast('Indicá el último día fuera de servicio', 'error');
+        if (hasta < baja.desde) {
+          return UI.toast('La reposición no puede ser anterior a la baja', 'error');
+        }
+        let r;
+        try {
+          r = await API.mutar('PUT', `/api/equipamiento/bajas/${baja.id}`, { hasta });
+        } catch (e) {
+          return UI.toast(e.message, 'error');
+        }
+        UI.cerrarTodas();
+        UI.toast(r.encolada ? 'Guardado (se enviará al recuperar la red)'
+                            : 'Equipo disponible', 'ok');
+        Sync.estado().then(pintarChipSync);
+        pintarNovedades();
+      };
     });
   }
 
@@ -742,7 +869,6 @@ const App = (() => {
     // Una fila por turno: el día ya no es la unidad de trabajo, la recorrida sí.
     const porClave = Object.fromEntries(
       controles.map((c) => [`${c.fecha}·${c.turno}`, c]));
-    const vencidos = new Set(mes ? mes.dias_vencidos_sin_control : []);
     const hoy = UI.hoyISO();
 
     const filas = Calc.diasDelMes(periodo).reverse()
@@ -753,14 +879,25 @@ const App = (() => {
                        + (turno === 'MANANA' ? 'mañana' : 'tarde');
 
         if (!c) {
-          const falta = vencidos.has(fecha);
-          return `<button class="item ${falta ? 'total' : ''}"
-                          data-crear="${fecha}" data-turno="${turno}">
+          // Solo hoy admite iniciar una recorrida. Un día anterior se muestra
+          // como lo que es —no se hizo y ya no se puede hacer— y sin botón:
+          // ofrecía "Iniciar" y el servidor lo rechazaba, así que el auditor
+          // llegaba hasta el diálogo de confirmación para comerse un error.
+          if (fecha !== hoy) {
+            return `<div class="item total">
+                      <span class="texto">
+                        <span class="nombre-item">${UI.esc(etiqueta)}</span>
+                        <span class="obs">No se hizo — ya no se puede cargar</span>
+                      </span>
+                      <span class="estado-item">Sin auditar</span>
+                    </div>`;
+          }
+          return `<button class="item" data-crear="${fecha}" data-turno="${turno}">
                     <span class="texto">
                       <span class="nombre-item">${UI.esc(etiqueta)}</span>
-                      <span class="obs">${falta ? 'Sin auditar' : 'Sin iniciar'}</span>
+                      <span class="obs">Sin iniciar</span>
                     </span>
-                    <span class="estado-item">${falta ? 'Sin auditar' : 'Iniciar'}</span>
+                    <span class="estado-item">Iniciar</span>
                   </button>`;
         }
         const cerrado = c.estado === 'CERRADO';
@@ -810,13 +947,14 @@ const App = (() => {
     if (!navigator.onLine) {
       return UI.toast('Se necesita conexión para iniciar un control nuevo', 'error');
     }
-    const hoy = UI.hoyISO();
+    // Ya no existe el caso "control atrasado": el servidor solo abre el de hoy,
+    // así que el diálogo que avisaba "estás cargando un día anterior" describía
+    // un camino imposible.
     const nombre = (NOMBRE_TURNO[turno] || turno).toLowerCase();
     const ok = await UI.confirmar(
-      fecha === hoy ? `Iniciar el ${nombre} de hoy` : 'Iniciar control atrasado',
+      `Iniciar el ${nombre} de hoy`,
       `Se abre el ${nombre} del ${UI.fechaLarga(fecha)}. `
-      + 'Todos los sectores arrancan sin verificar.'
-      + (fecha === hoy ? '' : ' Ojo: estás cargando un día anterior a hoy.'),
+      + 'Todos los sectores arrancan sin verificar.',
       'Iniciar');
     if (!ok) return;
 
@@ -1174,7 +1312,9 @@ const App = (() => {
 
   async function pintarPendientesAnteriores(control, cerrado) {
     const caja = $('#tarjeta-pendientes');
-    if (!caja) return;
+    // Sin control no hay tarjeta que repintar: pasa cuando la no conformidad se
+    // resolvió desde el centro de novedades, que no cuelga de ninguna recorrida.
+    if (!caja || !control) return;
 
     let pendientes = [];
     try {
