@@ -59,7 +59,9 @@ class Base(unittest.TestCase):
         tenerlos cargados para llegar a un porcentaje.
         """
         datos = {"documentacion_verificada": 1, "ley_19587_verificada": 1,
-                 "horas_hombre_programadas": 1000}
+                 "horas_hombre_programadas": 1000,
+                 # Explícito: vacío ya no cuenta como "no se perdió ninguna".
+                 "horas_hombre_perdidas": 0}
         datos.update(extra)
         self.conn.execute(
             "INSERT OR IGNORE INTO periodo_datos (periodo) VALUES (?)", (PERIODO,))
@@ -632,8 +634,9 @@ class TestCertificacion(Base):
         self._mes_completo()
         self.conn.execute(
             "INSERT INTO periodo_datos (periodo, horas_hombre_programadas, "
-            "monto_adjudicado, documentacion_verificada, "
-            "ley_19587_verificada) VALUES (?,1000,1000000,1,1)", (PERIODO,))
+            "horas_hombre_perdidas, monto_adjudicado, "
+            "documentacion_verificada, ley_19587_verificada) "
+            "VALUES (?,1000,0,1000000,1,1)", (PERIODO,))
         cur = self.conn.execute(
             "INSERT INTO insumos (nombre, punto_pedido) VALUES ('Detergente', 10)")
         self.conn.execute(
@@ -1422,8 +1425,9 @@ class TestEstadoModulos(Base):
         """Deja el período con todo lo que la certificación exige."""
         self.conn.execute(
             "INSERT INTO periodo_datos (periodo, documentacion_verificada, "
-            "ley_19587_verificada, horas_hombre_programadas, monto_adjudicado) "
-            "VALUES (?,1,1,1000,500000)", (PERIODO,))
+            "ley_19587_verificada, horas_hombre_programadas, "
+            "horas_hombre_perdidas, monto_adjudicado) "
+            "VALUES (?,1,1,1000,0,500000)", (PERIODO,))
         # Insumos del mes: sin stock relevado el ítem 5 queda sin datos.
         for f in self.conn.execute("SELECT id FROM insumos WHERE activo = 1"):
             self.conn.execute(

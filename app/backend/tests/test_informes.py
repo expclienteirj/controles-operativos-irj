@@ -202,8 +202,9 @@ class TestInformeLimpieza(BaseInformes):
             self._dia_completo(d)
         self.conn.execute(
             "INSERT INTO periodo_datos (periodo, horas_hombre_programadas, "
-            "monto_adjudicado, documentacion_verificada, "
-            "ley_19587_verificada) VALUES (?,1000,1000000,1,1)", (PERIODO,))
+            "horas_hombre_perdidas, monto_adjudicado, "
+            "documentacion_verificada, ley_19587_verificada) "
+            "VALUES (?,1000,0,1000000,1,1)", (PERIODO,))
         self.conn.commit()
         t = texto_pdf(informes.informe_limpieza(self.conn, PERIODO))
         self.assertIn("1.000.000,00", t)

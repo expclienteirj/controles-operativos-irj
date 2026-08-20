@@ -276,6 +276,39 @@ def migrar(conn: sqlite3.Connection) -> list[str]:
             conn.execute(f"ALTER TABLE periodo_datos DROP COLUMN {vieja}")
             aplicadas.append(f"periodo_datos: baja de {vieja}")
 
+    # `horas_hombre_perdidas` nació NOT NULL DEFAULT 0, lo que volvía
+    # indistinguible "nadie lo cargó" de "se constató que no se perdió ninguna
+    # hora". El primero regalaba un 100% en el ítem que pesa 40%. SQLite no
+    # permite quitar un NOT NULL con ALTER TABLE, así que hay que reconstruir.
+    #
+    # Los valores ya cargados se copian tal cual: un cero viejo puede haber
+    # sido deliberado o el default, y no hay manera de saberlo. Convertirlos a
+    # NULL sería afirmar que nadie los cargó, que es otra invención.
+    info = {f["name"]: f for f in conn.execute("PRAGMA table_info(periodo_datos)")}
+    if info.get("horas_hombre_perdidas") and info["horas_hombre_perdidas"]["notnull"]:
+        conn.execute("""
+            CREATE TABLE periodo_datos_nueva (
+                periodo                   TEXT PRIMARY KEY,
+                horas_hombre_programadas  REAL,
+                horas_hombre_perdidas     REAL,
+                documentacion_verificada  INTEGER NOT NULL DEFAULT 0,
+                hallazgos_documentacion   INTEGER NOT NULL DEFAULT 0,
+                ley_19587_verificada      INTEGER NOT NULL DEFAULT 0,
+                hallazgos_ley_19587       INTEGER NOT NULL DEFAULT 0,
+                monto_adjudicado          REAL,
+                cerrado                   INTEGER NOT NULL DEFAULT 0
+            )""")
+        conn.execute("""
+            INSERT INTO periodo_datos_nueva
+            SELECT periodo, horas_hombre_programadas, horas_hombre_perdidas,
+                   documentacion_verificada, hallazgos_documentacion,
+                   ley_19587_verificada, hallazgos_ley_19587,
+                   monto_adjudicado, cerrado
+            FROM periodo_datos""")
+        conn.execute("DROP TABLE periodo_datos")
+        conn.execute("ALTER TABLE periodo_datos_nueva RENAME TO periodo_datos")
+        aplicadas.append("periodo_datos: horas_hombre_perdidas admite sin dato")
+
     # La evidencia LoS pasó a identificar qué sub-ítem retrata.
     if "subitem" not in columnas("fotos"):
         conn.execute("ALTER TABLE fotos ADD COLUMN subitem TEXT")

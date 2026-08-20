@@ -520,7 +520,8 @@ class TestCertificacionAPI(TestAPI):
     def test_verificacion_de_documentacion_se_carga_desde_la_api(self):
         self.admin("PUT", "/api/periodos/2031-06/datos",
                    {"documentacion_verificada": 1, "ley_19587_verificada": 1,
-                    "horas_hombre_programadas": 1000})
+                    "horas_hombre_programadas": 1000,
+                    "horas_hombre_perdidas": 0})
         _, cert = self.auditor("GET", "/api/periodos/2031-06/certificacion")
         self.assertEqual(cert["detalle"]["documentacion"]["valor"], 1.0)
         self.assertNotIn("documentacion", cert["items_sin_datos"])
@@ -1236,7 +1237,8 @@ class TestEquipamientoEInsumos(TestAPI):
         # Los obligatorios del contrato, sin los cuales no se llega al detalle.
         self.admin("PUT", "/api/periodos/2033-01/datos",
                    {"documentacion_verificada": 1, "ley_19587_verificada": 1,
-                    "horas_hombre_programadas": 1000})
+                    "horas_hombre_programadas": 1000,
+                    "horas_hombre_perdidas": 0})
 
         _, cert = self.auditor("GET", "/api/periodos/2033-01/certificacion")
         self.assertEqual(cert["detalle"]["insumos"]["valor"], 0.5)

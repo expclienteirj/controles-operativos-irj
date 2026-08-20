@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS no_conformidades (
 CREATE TABLE IF NOT EXISTS periodo_datos (
     periodo               TEXT PRIMARY KEY,     
     horas_hombre_programadas  REAL,
-    horas_hombre_perdidas     REAL NOT NULL DEFAULT 0,
+    horas_hombre_perdidas     REAL,
     
     
     

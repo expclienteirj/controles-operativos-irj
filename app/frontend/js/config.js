@@ -787,9 +787,12 @@ const Config = (() => {
                  value="${d.horas_hombre_programadas ?? ''}">
         </div>
         <div class="campo">
-          <label for="pd-hhp">Horas hombre perdidas por ausencias</label>
+          <label for="pd-hhp">Horas hombre perdidas por ausencias
+            <span class="ayuda">Cargalo aunque sean cero: vacío no cuenta como
+              "no se perdió ninguna", cuenta como sin datos y bloquea la
+              certificación.</span></label>
           <input id="pd-hhp" type="number" min="0" step="0.5"
-                 value="${d.horas_hombre_perdidas ?? 0}">
+                 value="${d.horas_hombre_perdidas ?? ''}">
         </div>
         <div class="campo">
           <label for="pd-monto">Monto mensual adjudicado
@@ -873,7 +876,9 @@ const Config = (() => {
       };
       const cuerpo = {
         horas_hombre_programadas: num('#pd-hh'),
-        horas_hombre_perdidas: num('#pd-hhp') || 0,
+        // Sin `|| 0`: ese atajo convertía el campo vacío en un cero, que es
+        // justamente lo que hacía indistinguible "sin cargar" de "sin pérdidas".
+        horas_hombre_perdidas: num('#pd-hhp'),
         monto_adjudicado: num('#pd-monto'),
         documentacion_verificada: parseInt($('#pd-docv').value, 10),
         hallazgos_documentacion: num('#pd-doch') || 0,

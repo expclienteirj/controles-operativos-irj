@@ -857,9 +857,12 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
     d = dict(fila) if fila else {}
     # Los tres de calc.ITEMS_OBLIGATORIOS: sin ellos la certificación no se
     # emite, no es que salga más baja.
+    # Las horas perdidas se comparan contra None y no por verdadero/falso: cero
+    # es un valor legítimo —y el mejor posible— pero solo si alguien lo cargó.
     faltan_obligatorios = not (d.get("documentacion_verificada")
                                and d.get("ley_19587_verificada")
-                               and d.get("horas_hombre_programadas"))
+                               and d.get("horas_hombre_programadas")
+                               and d.get("horas_hombre_perdidas") is not None)
 
     activos = conn.execute(
         "SELECT COUNT(*) c FROM insumos WHERE activo = 1").fetchone()["c"]
@@ -1044,9 +1047,11 @@ def certificacion(conn: sqlite3.Connection, periodo: str,
                           if datos.get("documentacion_verificada") else None),
         "ley_19587": (calc.item_binario(datos.get("hallazgos_ley_19587", 0))
                       if datos.get("ley_19587_verificada") else None),
+        # Sin `, 0` de default: que el campo esté vacío no es lo mismo que
+        # haber constatado que no se perdió ninguna hora.
         "programacion_trabajos": calc.item_programacion(
             datos.get("horas_hombre_programadas"),
-            datos.get("horas_hombre_perdidas", 0)),
+            datos.get("horas_hombre_perdidas")),
         # Se alimenta del equipamiento relevado en los controles diarios, igual
         # que calidad de servicio se alimenta del check-list.
         "maquinarias": equipamiento["porcentaje"],

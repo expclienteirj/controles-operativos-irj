@@ -249,11 +249,21 @@ def item_binario(hallazgos: int) -> float:
     return 0.0 if (hallazgos or 0) > 0 else 1.0
 
 
-def item_programacion(horas_programadas: float, horas_perdidas: float) -> float | None:
-    """Ítem 3: horas hombre cumplidas / programadas."""
+def item_programacion(horas_programadas: float,
+                      horas_perdidas: float | None) -> float | None:
+    """Ítem 3: horas hombre cumplidas / programadas.
+
+    Sin las horas perdidas cargadas devuelve None, no 100%. Antes las trataba
+    como cero, así que un formulario sin tocar daba cumplimiento perfecto en el
+    ítem más pesado del pliego (40%). Cero horas perdidas es un resultado
+    excelente y hay que declararlo: es el mismo criterio con el que un sector
+    sin confirmar no promedia como 100%.
+    """
     if not horas_programadas or horas_programadas <= 0:
         return None
-    return _clamp((horas_programadas - (horas_perdidas or 0)) / horas_programadas)
+    if horas_perdidas is None:
+        return None
+    return _clamp((horas_programadas - horas_perdidas) / horas_programadas)
 
 
 def item_maquinarias(dias_periodo: int,

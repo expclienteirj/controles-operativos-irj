@@ -211,7 +211,13 @@ CREATE TABLE IF NOT EXISTS no_conformidades (
 CREATE TABLE IF NOT EXISTS periodo_datos (
     periodo               TEXT PRIMARY KEY,     -- 'YYYY-MM'
     horas_hombre_programadas  REAL,
-    horas_hombre_perdidas     REAL NOT NULL DEFAULT 0,
+    -- Admite NULL y no tiene DEFAULT a propósito. Con `NOT NULL DEFAULT 0` no
+    -- había forma de distinguir "nadie lo cargó" de "se cargaron cero horas
+    -- perdidas", y el campo vacío regalaba un 100% en el ítem que pesa 40% de
+    -- la certificación. Es la misma razón por la que los ítems 1 y 2 exigen
+    -- confirmación explícita: cero horas perdidas es un resultado excelente y
+    -- hay que declararlo, no heredarlo de un formulario sin tocar.
+    horas_hombre_perdidas     REAL,
     -- Los ítems 1 y 2 son binarios: cero hallazgos ⇒ 100%. Para que "nadie los
     -- revisó" no se confunda con "se revisaron y estaban bien", exigen una
     -- confirmación explícita del admin. Sin ella el ítem es Sin datos, igual

@@ -148,6 +148,14 @@ class TestCertificacion(unittest.TestCase):
     def test_programacion_sin_plan_cargado(self):
         self.assertIsNone(calc.item_programacion(0, 10))
 
+    def test_programacion_sin_las_horas_perdidas_es_sin_datos(self):
+        """Cero horas perdidas es el mejor resultado posible y hay que
+        declararlo. Tratando el campo vacío como cero, un formulario sin tocar
+        daba 100% en el ítem que pesa 40% de la certificación."""
+        self.assertIsNone(calc.item_programacion(1000, None))
+        # Cargado en cero sí vale 100%: eso es una constatación, no un vacío.
+        self.assertEqual(calc.item_programacion(1000, 0), 1.0)
+
     def test_maquinarias_promedia_por_equipo(self):
         """6 equipos exigidos, uno de baja 5 de 25 días: solo ese equipo baja
         su disponibilidad, y el promedio la reparte entre los 6."""
