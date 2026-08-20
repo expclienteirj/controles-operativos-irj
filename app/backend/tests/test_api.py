@@ -1065,6 +1065,30 @@ class TestConfiguracion(TestAPI):
         self.assertTrue(datos["estructura_ok"])         # base de prueba sana
         self.assertEqual(datos["problemas"], [])
 
+    def test_version_detecta_una_columna_que_no_admite_sin_dato(self):
+        """La deriva que ninguna migración arregla sola: el esquema de Postgres
+        se aplica a mano, así que una columna puede quedarse con un NOT NULL
+        que el código ya no espera. No rompe nada visible —la app calcula sobre
+        el default— y por eso hay que avisarlo."""
+        conn = db.conectar()
+        conn.execute("ALTER TABLE periodo_datos RENAME TO periodo_datos_ok")
+        conn.execute("CREATE TABLE periodo_datos ("
+                     "periodo TEXT PRIMARY KEY, horas_hombre_programadas REAL,"
+                     "horas_hombre_perdidas REAL NOT NULL DEFAULT 0)")
+        conn.commit()
+        try:
+            _, datos = self.pedir("GET", "/api/version")
+            self.assertFalse(datos["estructura_ok"])
+            self.assertIn("periodo_datos.horas_hombre_perdidas: no admite 'sin dato'",
+                          datos["problemas"])
+        finally:
+            conn.execute("DROP TABLE periodo_datos")
+            conn.execute("ALTER TABLE periodo_datos_ok RENAME TO periodo_datos")
+            conn.commit()
+            conn.close()
+        _, datos = self.pedir("GET", "/api/version")
+        self.assertTrue(datos["estructura_ok"], datos["problemas"])
+
     def test_version_detecta_la_fila_unica_faltante(self):
         """El chequeo tiene que ver el bug que se nos escapó en producción."""
         conn = db.conectar()

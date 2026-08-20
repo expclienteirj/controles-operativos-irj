@@ -195,6 +195,13 @@ FILAS_UNICAS = ("asientos_preembarque",)
 CATALOGOS_SEMBRADOS = ("sectores_limpieza", "items_limpieza",
                        "equipamiento_limpieza", "los_items", "config")
 
+# Columnas donde "sin cargar" tiene que poder representarse. Si el motor las
+# declara obligatorias, el dato faltante se reemplaza por un default y la app
+# afirma algo que nadie constató: con `horas_hombre_perdidas` en NOT NULL
+# DEFAULT 0, un formulario sin tocar daba 100% en el ítem que pesa el 40% de la
+# certificación.
+COLUMNAS_QUE_ADMITEN_SIN_DATO = (("periodo_datos", "horas_hombre_perdidas"),)
+
 
 def _claves_config_faltantes(conn) -> list[str]:
     """Claves de configuración que el seed define y la base no tiene.
@@ -233,6 +240,17 @@ def chequeos_estructurales(conn) -> list[str]:
     faltantes = _claves_config_faltantes(conn)
     if faltantes:
         problemas.append("config: faltan las claves " + ", ".join(faltantes))
+
+    # Un NOT NULL de más no se nota: la app sigue andando, calculando sobre un
+    # default que nadie cargó. Se envuelve en try porque este chequeo consulta
+    # el catálogo del motor, y una falla suya no puede tumbar justamente al
+    # endpoint que existe para avisar que algo anda mal.
+    try:
+        for tabla, columna in COLUMNAS_QUE_ADMITEN_SIN_DATO:
+            if db.columna_obligatoria(conn, tabla, columna):
+                problemas.append(f"{tabla}.{columna}: no admite 'sin dato'")
+    except Exception:
+        pass
     return problemas
 
 

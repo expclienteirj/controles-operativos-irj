@@ -487,6 +487,25 @@ def inicializar(path: str | None = None,
     return conn, resumen
 
 
+def columna_obligatoria(conn, tabla: str, columna: str) -> bool:
+    """¿La columna rechaza 'sin dato'?
+
+    Sirve para detectar una base donde una migración no llegó. Las de `migrar()`
+    son recetas de SQLite; el esquema de Postgres se aplica a mano, así que una
+    columna puede quedarse con un `NOT NULL` que el código ya no espera. Eso no
+    rompe nada de forma visible: deja a la app calculando sobre un valor por
+    defecto que nadie cargó, que es peor.
+    """
+    if _es_postgres(conn):
+        fila = conn.execute(
+            "SELECT is_nullable FROM information_schema.columns "
+            "WHERE table_name = ? AND column_name = ?", (tabla, columna)).fetchone()
+        return bool(fila) and fila["is_nullable"] == "NO"
+    fila = next((f for f in conn.execute(f"PRAGMA table_info({tabla})")
+                 if f["name"] == columna), None)
+    return bool(fila) and bool(fila["notnull"])
+
+
 def get_config(conn: sqlite3.Connection, clave: str, default=None):
     fila = conn.execute("SELECT valor FROM config WHERE clave = ?", (clave,)).fetchone()
     return json.loads(fila["valor"]) if fila else default
