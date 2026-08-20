@@ -19,11 +19,19 @@
  *   - API: siempre a la red. Nunca se cachean respuestas ni se sirven datos
  *     viejos como si fueran actuales; de eso se ocupa IndexedDB, que sí sabe
  *     distinguir "guardado local" de "confirmado por el servidor". Las fotos
- *     son la excepción y las cachea el navegador por su cabecera, no acá: su
- *     ruta lleva fecha y sufijo aleatorio, así que nunca cambia de contenido.
+ *     son la excepción, pero tampoco se cachean acá: las guarda `API.imagen`
+ *     en una caché propia ('irj-fotos'), porque esa se puede borrar entera al
+ *     cerrar sesión y estas tablets las comparten varios auditores.
  */
 
-const VERSION = 'irj-v23';
+const VERSION = 'irj-v24';
+
+// Caché de evidencia fotográfica, propiedad de `API.imagen`. No la maneja el
+// worker, pero sí tiene que sobrevivir a sus actualizaciones: el barrido de
+// `activate` borra toda caché que no sea la del shell, y sin esta excepción
+// cada versión nueva de la app dejaría al auditor sin las fotos que ya tenía
+// bajadas, justo en el momento en que puede no haber señal para recuperarlas.
+const CACHE_FOTOS = 'irj-fotos';
 const SHELL = [
   '/',
   '/index.html',
@@ -54,7 +62,8 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
       .then((claves) => Promise.all(
-        claves.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+        claves.filter((k) => k !== VERSION && k !== CACHE_FOTOS)
+              .map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

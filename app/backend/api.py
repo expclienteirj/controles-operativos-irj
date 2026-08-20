@@ -690,6 +690,12 @@ def get_control(ctx, control_id):
         "FROM desvios d JOIN items_limpieza i ON i.id = d.item_id "
         "JOIN sectores_limpieza s ON s.id = i.sector_id WHERE d.control_id = ?",
         (control_id,))]
+    # Con la evidencia ya cargada, para que reabrir un desvío la muestre en vez
+    # de una tira vacía que invita a volver a fotografiar lo mismo.
+    fotos = services.fotos_por_entidad(
+        ctx["conn"], "desvio", [d["id"] for d in estado["desvios"]])
+    for d in estado["desvios"]:
+        d["fotos"] = fotos.get(d["id"], [])
     return estado
 
 

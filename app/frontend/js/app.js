@@ -465,10 +465,14 @@ const App = (() => {
           Sincronizar ahora
         </button>
       </div>
-      <button class="btn btn-bloque" data-salir style="margin-top:12px">
+      <button class="btn btn-bloque" data-password style="margin-top:12px">
+        Cambiar contraseña
+      </button>
+      <button class="btn btn-bloque" data-salir style="margin-top:8px">
         Cerrar sesión
       </button>`, (hoja, cerrar) => {
       hoja.querySelector('[data-cerrar]').onclick = cerrar;
+      hoja.querySelector('[data-password]').onclick = () => hojaPassword();
       hoja.querySelector('[data-sync]').onclick = async () => {
         cerrar();
         await Sync.sincronizar({ silencioso: false });
@@ -487,6 +491,70 @@ const App = (() => {
         await API.logout();
         usuario = null;
         vistaLogin();
+      };
+    });
+  }
+
+  /**
+   * Cambio de contraseña del usuario en sesión.
+   *
+   * El endpoint existía desde el principio y no había pantalla que lo llamara:
+   * la única forma de cambiar una contraseña era que un administrador la
+   * reescribiera, con lo que eso implica —alguien más elige y conoce la clave
+   * con la que un auditor firma sus recorridas—.
+   *
+   * No se encola: pide la contraseña actual, así que sin red no hay forma de
+   * verificarla, y una operación que espera en la cola dejaría al auditor
+   * creyendo que ya cambió cuando todavía no.
+   */
+  function hojaPassword() {
+    UI.abrirHoja(`
+      <h3>Cambiar contraseña</h3>
+      <p class="sub">Se cierran las sesiones abiertas en otras tablets</p>
+      <div class="campo">
+        <label for="pw-actual">Contraseña actual</label>
+        <input type="password" id="pw-actual" autocomplete="current-password">
+      </div>
+      <div class="campo">
+        <label for="pw-nueva">Nueva contraseña
+          <span class="ayuda">Mínimo 8 caracteres</span></label>
+        <input type="password" id="pw-nueva" autocomplete="new-password">
+      </div>
+      <div class="campo">
+        <label for="pw-repetir">Repetir la nueva</label>
+        <input type="password" id="pw-repetir" autocomplete="new-password">
+      </div>
+      <div class="acciones">
+        <button class="btn" data-cancelar>Cancelar</button>
+        <button class="btn btn-primario" data-guardar>Cambiar</button>
+      </div>`, (hoja, cerrar) => {
+      hoja.querySelector('[data-cancelar]').onclick = cerrar;
+      hoja.querySelector('[data-guardar]').onclick = async () => {
+        const actual = hoja.querySelector('#pw-actual').value;
+        const nueva = hoja.querySelector('#pw-nueva').value;
+        const repetir = hoja.querySelector('#pw-repetir').value;
+
+        if (!actual) return UI.toast('Escribí tu contraseña actual', 'error');
+        if (nueva.length < 8) {
+          return UI.toast('La nueva tiene que tener al menos 8 caracteres', 'error');
+        }
+        // Se compara acá y no en el servidor: el error de tipeo se detecta sin
+        // gastar un viaje, y sobre todo sin dejar puesta una contraseña que el
+        // auditor cree que es otra.
+        if (nueva !== repetir) {
+          return UI.toast('Las dos contraseñas nuevas no coinciden', 'error');
+        }
+        if (!navigator.onLine) {
+          return UI.toast('Necesitás conexión para cambiar la contraseña', 'error');
+        }
+
+        try {
+          await API.post('/api/password', { actual, nueva });
+        } catch (e) {
+          return UI.toast(e.message, 'error');
+        }
+        UI.cerrarTodas();
+        UI.toast('Contraseña cambiada', 'ok');
       };
     });
   }
@@ -1109,7 +1177,8 @@ const App = (() => {
       // El servidor es la verdad: se re-espeja el estado local.
       local = { desvios: {}, confirmados: {} };
       datos.desvios.forEach((d) => {
-        local.desvios[d.item_id] = { estado: d.estado, observacion: d.observacion };
+        local.desvios[d.item_id] = { estado: d.estado, observacion: d.observacion,
+                                     fotos: d.fotos || [] };
       });
       datos.sectores.forEach((s) => {
         if (s.confirmado) local.confirmados[s.sector_id] = true;
@@ -1426,6 +1495,11 @@ const App = (() => {
       <p class="sub">${UI.esc([p.sector, p.item].filter(Boolean).join(' · '))} —
         relevada el ${UI.esc(p.fecha_origen)}</p>
       <div class="aviso info">${UI.esc(p.descripcion)}</div>
+      ${(p.fotos || []).length ? `
+        <div class="campo">
+          <label>Cómo se relevó <span class="ayuda">Tocá para ampliar</span></label>
+          <div class="fotos" id="nc-fotos"></div>
+        </div>` : ''}
       <div class="campo">
         <label>Qué constataste
           <span class="ayuda">Queda registrado con tu usuario y la fecha</span></label>
@@ -1436,6 +1510,11 @@ const App = (() => {
         <button class="btn" data-cancelar>Cancelar</button>
         <button class="btn btn-verde" data-guardar>Marcar resuelta</button>
       </div>`, (hoja, cerrar) => {
+      // La foto del día que se relevó. Dar por resuelta una no conformidad
+      // leyendo solo la descripción escrita obliga a confiar en el recuerdo de
+      // otro auditor, y muchas veces de otro mes.
+      UI.galeria(hoja.querySelector('#nc-fotos'), p.fotos || [],
+                 { titulo: [p.sector, p.item].filter(Boolean).join(' · ') });
       hoja.querySelector('[data-cancelar]').onclick = cerrar;
       hoja.querySelector('[data-guardar]').onclick = async () => {
         const texto = hoja.querySelector('#nc-resolucion').value.trim();
@@ -2255,6 +2334,11 @@ const App = (() => {
     const actual = local.desvios[item.id];
     let estado = actual ? actual.estado : null;
     let fotos = [];
+    // La evidencia que ya tenía el desvío. Mostrarla no es un adorno: sin esto
+    // la tira aparecía vacía al reabrir, el auditor volvía a fotografiar lo
+    // mismo y el backend guardaba las dos, así que el hallazgo terminaba
+    // duplicado en el informe del mes.
+    const guardadas = (actual && actual.fotos) || [];
 
     /** ¿Se puede abandonar la hoja sin guardar? */
     const puedeDescartarse = () => {
@@ -2299,6 +2383,9 @@ const App = (() => {
 
       <div class="campo" id="campo-fotos">
         <label>Evidencia fotográfica</label>
+        ${guardadas.length ? `<span class="ayuda">${guardadas.length} ya
+          cargada(s) — tocá para ampliar</span>
+          <div class="fotos" id="fotos-guardadas"></div>` : ''}
         <div class="fotos" id="fotos">
           <button class="btn-foto" id="btn-foto" type="button">
             <span class="icono" aria-hidden="true">📷</span>
@@ -2321,6 +2408,8 @@ const App = (() => {
 
       const btnGuardar = hoja.querySelector('[data-guardar]');
       const obs = hoja.querySelector('#obs');
+      UI.galeria(hoja.querySelector('#fotos-guardadas'), guardadas,
+                 { titulo: item.nombre });
       // Deshabilitado hasta elegir severidad y describir el hallazgo: antes no
       // había ninguna señal de que fueran obligatorios hasta apretar Guardar y
       // recibir un toast de error.

@@ -15,6 +15,7 @@ const LoS = (() => {
   // Día que se está relevando en un ítem diario. null en los mensuales: el
   // servidor rechaza una fecha en un ítem que no la admite.
   let fechaItem = null;
+  let fotosItem = [];           // evidencia ya guardada del ítem que se abre
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -780,11 +781,13 @@ const LoS = (() => {
 
   /** Datos ya cargados de un ítem diario en un día, para poder editarlos. */
   async function medicionDelDia(clave, fecha) {
+    fotosItem = [];
     if (!relevamiento) return {};
     try {
       const r = await API.get(
         `/api/los/relevamientos/${relevamiento.id}/mediciones`
         + `?item=${encodeURIComponent(clave)}&fecha=${fecha}`);
+      fotosItem = (r.medicion && r.medicion.fotos) || [];
       return (r.medicion && r.medicion.datos) || {};
     } catch (e) {
       return {};
@@ -803,7 +806,24 @@ const LoS = (() => {
     };
     const fn = formularios[clave];
     if (!fn) return UI.toast('Ítem sin formulario disponible', 'error');
+    // Las diarias ya dejaron sus fotos en `fotosItem` al pasar por
+    // `medicionDelDia`; las mensuales viven en el dashboard, indexadas por
+    // ítem. `fechaItem` es lo que distingue un camino del otro.
+    if (!fechaItem) {
+      fotosItem = (mediciones[clave] && mediciones[clave].fotos) || [];
+    }
     fn(previo || {}, volver);
+  }
+
+  /**
+   * Fotos ya guardadas del sub-ítem que se está por editar.
+   *
+   * El servidor viene mandando la evidencia de cada medición desde siempre y
+   * la pantalla la descartaba: al reabrir un ítem el auditor no tenía forma de
+   * ver qué había fotografiado, ni de saber que ya lo había hecho.
+   */
+  function fotosGuardadas(subitem) {
+    return fotosItem.filter((f) => (f.subitem || null) === (subitem || null));
   }
 
   /* ============================================ evidencia fotográfica === */
@@ -823,6 +843,7 @@ const LoS = (() => {
       <div class="evidencia" id="ev-${id}" hidden>
         <p class="evidencia-titulo">Evidencia fotográfica
           <span class="ayuda">${UI.esc(textoExige)}</span></p>
+        <div class="fotos" id="ev-guardadas-${id}"></div>
         <div class="fotos" id="ev-fotos-${id}">
           <button class="btn-foto" type="button" data-ev-tomar="${id}"
                   aria-label="Tomar foto">📷</button>
@@ -847,6 +868,9 @@ const LoS = (() => {
     const omitir = hoja.querySelector(`[data-ev-omitir="${id}"]`);
     const motivo = hoja.querySelector(`[data-ev-motivo="${id}"]`);
     let fotos = [];
+
+    UI.galeria(hoja.querySelector(`#ev-guardadas-${id}`), fotosGuardadas(subitem),
+               { titulo: subitem || '' });
 
     hoja.querySelector(`[data-ev-tomar="${id}"]`).onclick = async () => {
       const dataUrl = await UI.tomarFoto();

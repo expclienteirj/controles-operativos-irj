@@ -347,6 +347,74 @@ input:focus, textarea:focus, select:focus {
 .btn-foto .icono { font-size: 22px; line-height: 1; }
 .btn-foto .txt { font-size: 11px; font-weight: 600; line-height: 1.1; text-align: center; }
 
+/* Evidencia ya guardada. Mismo tamaño y forma que la recién sacada —el auditor
+   no tiene por qué aprender dos lenguajes visuales para la misma cosa— pero
+   sin el botón de quitar: lo guardado no se edita desde acá. */
+.foto-guardada {
+  position: relative; width: 88px; height: 88px; padding: 0;
+  border: 1px solid var(--borde); border-radius: 10px; overflow: hidden;
+  background: var(--gris-fondo); cursor: pointer;
+}
+.foto-guardada img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  opacity: 0; transition: opacity .15s;
+}
+.foto-guardada.lista img { opacity: 1; }
+/* Sin señal y sin copia local no hay foto que mostrar. Se dice, en vez de
+   dejar un cuadro gris que el auditor interpreta como "todavía carga". */
+.foto-guardada.rota { border-style: dashed; cursor: default; }
+.foto-guardada.rota::after {
+  content: 'sin conexión'; position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--gris); text-align: center; padding: 4px;
+}
+.foto-guardada .epigrafe {
+  position: absolute; left: 4px; bottom: 4px; max-width: calc(100% - 8px);
+  background: rgba(26, 31, 38, .72); color: #fff; font-size: 11px;
+  padding: 1px 5px; border-radius: 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ------------------------------------------------------- visor de fotos -- */
+/* Por encima del modal (z-index 100): se abre desde una hoja y la hoja tiene
+   que seguir abajo al cerrarlo. Fondo oscuro y opaco porque lo que importa es
+   el detalle de la foto —una mancha, una junta— y cualquier cosa alrededor
+   compite con eso. */
+.visor {
+  position: fixed; inset: 0; z-index: 200;
+  background: #12161c;
+  display: flex; flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.visor-barra {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; color: #fff; font-size: 13px;
+  padding-top: max(10px, env(safe-area-inset-top));
+}
+.visor-x {
+  min-width: var(--tap); min-height: var(--tap);
+  background: none; border: 0; color: #fff; font-size: 28px; line-height: 1;
+  cursor: pointer;
+}
+.visor-cuerpo {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  gap: 6px; padding: 0 6px; min-height: 0;
+}
+.visor-cuerpo img {
+  flex: 1; min-width: 0; max-width: 100%; max-height: 100%;
+  object-fit: contain; border-radius: 8px;
+}
+.visor-nav {
+  min-width: var(--tap); min-height: var(--tap);
+  background: rgba(255, 255, 255, .12); border: 0; border-radius: 50%;
+  color: #fff; font-size: 26px; line-height: 1; cursor: pointer; flex: 0 0 auto;
+}
+.visor-pie { padding: 14px; color: #fff; }
+.visor-titulo { font-size: 15px; }
+/* Gris claro y no --gris: sobre el fondo oscuro del visor, el gris de la app
+   —pensado para texto sobre blanco— queda por debajo del contraste mínimo. */
+.visor-meta { font-size: 12px; color: #c8cfd6; margin-top: 2px; }
+
 /* ----------------------------------------------------------- calendario -- */
 /* Un mes entero de un vistazo. Cada día es tocable para abrir su detalle.
    auto-fill con minmax garantiza celdas de al menos 44px (mínimo táctil

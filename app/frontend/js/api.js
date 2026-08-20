@@ -84,7 +84,10 @@ const API = (() => {
   async function logout() {
     try { await post('/api/logout'); } catch (e) { /* la sesión local se limpia igual */ }
     setToken(null);
-    await Store.limpiarTodo();
+    // La evidencia se va con el resto de los datos locales: la tablet la
+    // comparten varios auditores y las fotos de una recorrida no tienen por
+    // qué quedar al alcance del turno siguiente.
+    await Promise.all([Store.limpiarTodo(), purgarFotos()]);
   }
 
   // Usuario de la sesión en curso. Se cachea acá para que los módulos que no
@@ -171,7 +174,74 @@ const API = (() => {
     return nombre;
   }
 
-  return { get, post, put, del, mutar, getCacheado, descargar, login, logout,
+  /* --------------------------------------------------- evidencia fotográfica -- */
+
+  // Caché durable de fotos, aparte del shell: se borra entera al cerrar
+  // sesión sin tocar la app cacheada.
+  const CACHE_FOTOS = 'irj-fotos';
+
+  // Las que ya se convirtieron a blob en esta sesión de pantalla. Evita
+  // recrear un objectURL por cada vez que se abre la misma hoja.
+  const urlsFotos = new Map();
+
+  async function cacheFotos() {
+    // En un contexto sin `caches` (http:// que no sea localhost) la app tiene
+    // que seguir mostrando fotos, solo que sin guardarlas.
+    try { return 'caches' in self ? await caches.open(CACHE_FOTOS) : null; }
+    catch (e) { return null; }
+  }
+
+  /**
+   * URL local de una foto guardada, lista para el `src` de un <img>.
+   *
+   * Un `<img src="/api/fotos/…">` no funciona: la API se autentica con el
+   * header Authorization y una etiqueta <img> no manda headers, así que el
+   * servidor respondería 401 y se vería la imagen rota. Se baja el binario
+   * como cualquier otra llamada y se lo expone como objectURL.
+   *
+   * La copia durable va a la Cache API y no al caché HTTP del navegador —de
+   * ahí el `no-store`— porque estas tablets las comparten varios auditores:
+   * el caché HTTP guarda en disco una copia que ninguna línea de JS puede
+   * borrar, y sobreviviría al cierre de sesión. Esta se purga (ver `logout`).
+   * A cambio, la evidencia queda disponible sin señal, que en plataforma es
+   * la mitad de las veces.
+   */
+  async function imagen(ruta) {
+    const ya = urlsFotos.get(ruta);
+    if (ya) return ya;
+
+    const cache = await cacheFotos();
+    let r = cache ? await cache.match(ruta) : null;
+    if (!r) {
+      r = await fetch(ruta, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        cache: 'no-store',
+      });
+      if (!r.ok) {
+        throw new ErrorAPI(
+          r.status === 404 ? 'La foto ya no está en el servidor'
+                           : `No se pudo abrir la foto (${r.status})`, r.status);
+      }
+      // Guardar no puede hacer fallar la apertura: sin cuota o sin permiso, la
+      // foto se ve igual, solo que hay que volver a bajarla la próxima vez.
+      if (cache) { try { await cache.put(ruta, r.clone()); } catch (e) { /* sin espacio */ } }
+    }
+
+    const url = URL.createObjectURL(await r.blob());
+    urlsFotos.set(ruta, url);
+    return url;
+  }
+
+  /** Borra la evidencia guardada en la tablet. Se llama al cerrar sesión. */
+  async function purgarFotos() {
+    urlsFotos.forEach((u) => URL.revokeObjectURL(u));
+    urlsFotos.clear();
+    try { if ('caches' in self) await caches.delete(CACHE_FOTOS); }
+    catch (e) { /* nada que purgar */ }
+  }
+
+  return { get, post, put, del, mutar, getCacheado, descargar, imagen,
+           purgarFotos, login, logout,
            restaurarSesion, prepararSesion, validarSesion,
            usuarioActual, esAdmin, setToken, getToken, ErrorAPI };
 })();

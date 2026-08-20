@@ -299,6 +299,143 @@ const UI = (() => {
     });
   }
 
+  /* ------------------------------------------------- evidencia ya guardada -- */
+
+  /**
+   * Pinta las fotos ya guardadas de una entidad como miniaturas tocables.
+   *
+   * Las guardadas no llevan el botón de quitar que sí tienen las que se están
+   * cargando en la hoja: la evidencia de una auditoría firmada no se edita
+   * desde la pantalla, igual que no se edita un desvío ya cerrado. Si hay que
+   * sacar una, es por la vía de reabrir, que queda en el log.
+   *
+   * Cada miniatura se baja por separado y a su tiempo: la hoja se abre sin
+   * esperar a ninguna, y una foto que no se puede recuperar —sin señal y sin
+   * copia local— se marca sola sin tumbar al resto.
+   */
+  function galeria(contenedor, fotos, { titulo = '' } = {}) {
+    if (!contenedor) return;
+    if (!fotos || !fotos.length) { contenedor.innerHTML = ''; return; }
+
+    contenedor.innerHTML = fotos.map((f, i) => `
+      <button type="button" class="foto-guardada" data-i="${i}"
+              aria-label="Ampliar foto ${i + 1} de ${fotos.length}${
+                f.subitem ? `, ${esc(f.subitem)}` : ''}">
+        <img alt="">
+        ${f.subitem ? `<span class="epigrafe">${esc(f.subitem)}</span>` : ''}
+      </button>`).join('');
+
+    contenedor.querySelectorAll('.foto-guardada').forEach((btn) => {
+      const f = fotos[Number(btn.dataset.i)];
+      API.imagen(`/api/fotos/${f.archivo}`).then((url) => {
+        btn.querySelector('img').src = url;
+        btn.classList.add('lista');
+      }).catch(() => {
+        btn.classList.add('rota');
+        btn.disabled = true;
+        btn.setAttribute('aria-label', 'Foto no disponible sin conexión');
+      });
+      btn.onclick = () => visorFotos(fotos, Number(btn.dataset.i), titulo);
+    });
+  }
+
+  /**
+   * Visor a pantalla completa, con la foto lo más grande que entre.
+   *
+   * Vive fuera de `#modal` y por encima de él: se abre desde una hoja, y la
+   * hoja tiene que seguir ahí abajo cuando el auditor cierra el visor. Por lo
+   * mismo no empuja una entrada de historial propia —se enredaría con la pila
+   * de hojas— pero sí se cierra si el auditor va para atrás, para no quedar
+   * flotando sobre una pantalla que ya cambió.
+   */
+  function visorFotos(fotos, indice = 0, titulo = '') {
+    let i = Math.max(0, Math.min(indice, fotos.length - 1));
+
+    const visor = document.createElement('div');
+    visor.className = 'visor';
+    visor.setAttribute('role', 'dialog');
+    visor.setAttribute('aria-modal', 'true');
+    visor.setAttribute('aria-label', 'Evidencia fotográfica');
+    visor.innerHTML = `
+      <div class="visor-barra">
+        <span class="contador">${fotos.length > 1 ? `1 de ${fotos.length}` : ''}</span>
+        <button type="button" class="visor-x" data-cerrar aria-label="Cerrar">×</button>
+      </div>
+      <div class="visor-cuerpo">
+        ${fotos.length > 1
+          ? '<button type="button" class="visor-nav" data-paso="-1" aria-label="Anterior">‹</button>'
+          : ''}
+        <img alt="">
+        ${fotos.length > 1
+          ? '<button type="button" class="visor-nav" data-paso="1" aria-label="Siguiente">›</button>'
+          : ''}
+      </div>
+      <div class="visor-pie">
+        <div class="visor-titulo"></div>
+        <div class="visor-meta"></div>
+      </div>`;
+    document.body.appendChild(visor);
+
+    const img = visor.querySelector('img');
+    const pintar = () => {
+      const f = fotos[i];
+      img.removeAttribute('src');
+      visor.querySelector('.contador').textContent =
+        fotos.length > 1 ? `${i + 1} de ${fotos.length}` : '';
+      visor.querySelector('.visor-titulo').textContent = f.subitem || titulo || '';
+      visor.querySelector('.visor-meta').textContent =
+        [fecha(f.tomada_en), f.subitem && titulo ? titulo : '']
+          .filter(Boolean).join(' · ');
+      API.imagen(`/api/fotos/${f.archivo}`)
+        .then((url) => { img.src = url; })
+        .catch(() => {
+          visor.querySelector('.visor-meta').textContent =
+            'No se pudo abrir esta foto sin conexión';
+        });
+    };
+
+    const mover = (paso) => {
+      i = (i + paso + fotos.length) % fotos.length;
+      pintar();
+    };
+
+    const cerrar = () => {
+      visor.remove();
+      document.removeEventListener('keydown', teclas);
+      window.removeEventListener('popstate', cerrar);
+    };
+
+    function teclas(e) {
+      if (e.key === 'Escape') { e.stopPropagation(); cerrar(); }
+      else if (e.key === 'ArrowLeft' && fotos.length > 1) mover(-1);
+      else if (e.key === 'ArrowRight' && fotos.length > 1) mover(1);
+    }
+
+    visor.querySelector('[data-cerrar]').onclick = cerrar;
+    visor.querySelectorAll('[data-paso]').forEach((b) => {
+      b.onclick = () => mover(Number(b.dataset.paso));
+    });
+    // El toque en el fondo cierra; sobre la foto o los controles, no.
+    visor.onclick = (e) => { if (e.target === visor) cerrar(); };
+
+    // Deslizar para pasar de foto: es el gesto que el auditor ya espera, y con
+    // guantes de trabajo es bastante más confiable que apuntarle a una flecha.
+    let x0 = null;
+    visor.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; },
+                           { passive: true });
+    visor.addEventListener('touchend', (e) => {
+      if (x0 === null || fotos.length < 2) return;
+      const dx = e.changedTouches[0].clientX - x0;
+      if (Math.abs(dx) > 40) mover(dx < 0 ? 1 : -1);
+      x0 = null;
+    }, { passive: true });
+
+    document.addEventListener('keydown', teclas);
+    window.addEventListener('popstate', cerrar);
+    visor.querySelector('[data-cerrar]').focus();
+    pintar();
+  }
+
   /* -------------------------------------------------------------- varios -- */
 
   function fecha(iso) {
@@ -440,7 +577,7 @@ const UI = (() => {
 
   return { esc, toast, toastDeshacer, toastAccion,
            abrirHoja, cerrarHoja, cerrarTodas, cerrarParaNavegar,
-           confirmar, tomarFoto, calendarioMes,
+           confirmar, tomarFoto, galeria, visorFotos, calendarioMes,
            comprimirImagen, fecha, fechaLarga, fechaCorta, hora,
            hoyISO, ahoraISO, periodoActual, nombrePeriodo };
 })();

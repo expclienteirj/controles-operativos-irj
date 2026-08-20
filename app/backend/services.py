@@ -632,6 +632,32 @@ def registrar_desvio(conn: sqlite3.Connection, control_id: int, item_id: int,
     return {"desvio_id": desvio_id}
 
 
+def fotos_por_entidad(conn: sqlite3.Connection, entidad: str,
+                      ids: "list[int]") -> dict:
+    """Fotos de varias entidades en una sola consulta, indexadas por entidad_id.
+
+    Una consulta por desvío convertía una pantalla de veinte ítems en veintiún
+    viajes a la base. Se traen todas juntas y se reparten en memoria.
+
+    Devuelve solo la ruta, el sub-ítem y cuándo se tomó: es lo que la pantalla
+    necesita para mostrarlas y titularlas. El binario se pide aparte, por
+    `/api/fotos/…`, y solo el de la foto que el auditor efectivamente abre.
+    """
+    ids = [i for i in dict.fromkeys(ids) if i]      # sin repetidos ni nulos
+    if not ids:
+        return {}
+    marcas = ",".join("?" * len(ids))
+    por_id: dict = {}
+    for f in conn.execute(
+            f"SELECT entidad_id, archivo, subitem, tomada_en FROM fotos "
+            f" WHERE entidad = ? AND entidad_id IN ({marcas}) "
+            " ORDER BY id", (entidad, *ids)):
+        por_id.setdefault(f["entidad_id"], []).append(
+            {"archivo": f["archivo"], "subitem": f["subitem"],
+             "tomada_en": f["tomada_en"]})
+    return por_id
+
+
 def nc_pendientes_anteriores(conn: sqlite3.Connection, fecha: str,
                              limite: int = 50,
                              incluir_fecha: bool = False) -> list[dict]:
@@ -649,7 +675,7 @@ def nc_pendientes_anteriores(conn: sqlite3.Connection, fecha: str,
     comparador = "<=" if incluir_fecha else "<"
     filas = conn.execute(
         "SELECT id, periodo, fecha_origen, origen, sector, item, descripcion, "
-        "       prioridad, creado_en "
+        "       prioridad, creado_en, desvio_id "
         "  FROM no_conformidades "
         f" WHERE estado = 'ABIERTA' AND fecha_origen IS NOT NULL "
         f"   AND fecha_origen {comparador} ? "
@@ -662,6 +688,14 @@ def nc_pendientes_anteriores(conn: sqlite3.Connection, fecha: str,
         d = dict(f)
         d["dias_pendiente"] = (hoy - date.fromisoformat(d["fecha_origen"])).days
         pendientes.append(d)
+
+    # La evidencia de una NC de limpieza cuelga del desvío que la originó, que
+    # es donde el auditor sacó la foto. Sin esto, cerrar una no conformidad
+    # obliga a decidir leyendo solo la descripción escrita.
+    fotos = fotos_por_entidad(conn, "desvio",
+                              [d["desvio_id"] for d in pendientes])
+    for d in pendientes:
+        d["fotos"] = fotos.get(d["desvio_id"], [])
     return pendientes
 
 
@@ -1824,7 +1858,11 @@ def medicion_del_dia(conn: sqlite3.Connection, relevamiento_id: int,
         return None
     return {**dict(f),
             "datos": json.loads(f["datos"]) if f["datos"] else {},
-            "resultado": json.loads(f["resultado"]) if f["resultado"] else None}
+            "resultado": json.loads(f["resultado"]) if f["resultado"] else None,
+            # Igual que en las mensuales: reabrir un día tiene que mostrar lo
+            # que ya se fotografió ese día, no una tira en blanco.
+            "fotos": fotos_por_entidad(
+                conn, "los_medicion", [f["id"]]).get(f["id"], [])}
 
 
 def mediciones_relevamiento(conn: sqlite3.Connection, relevamiento_id: int) -> dict:
@@ -1842,10 +1880,12 @@ def mediciones_relevamiento(conn: sqlite3.Connection, relevamiento_id: int) -> d
             "FROM los_mediciones WHERE relevamiento_id = ? AND fecha = ''",
             (relevamiento_id,)):
         # Con el sub-ítem, para que el informe sepa qué retrata cada foto.
-        fotos = [{"archivo": r["archivo"], "subitem": r["subitem"]}
+        fotos = [{"archivo": r["archivo"], "subitem": r["subitem"],
+                  "tomada_en": r["tomada_en"]}
                  for r in conn.execute(
-                     "SELECT archivo, subitem FROM fotos "
-                     "WHERE entidad = 'los_medicion' AND entidad_id = ?", (f["id"],))]
+                     "SELECT archivo, subitem, tomada_en FROM fotos "
+                     "WHERE entidad = 'los_medicion' AND entidad_id = ? "
+                     "ORDER BY id", (f["id"],))]
         mediciones[f["item_clave"]] = {
             "datos": json.loads(f["datos"]),
             "resultado": json.loads(f["resultado"]) if f["resultado"] else None,

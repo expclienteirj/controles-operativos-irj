@@ -405,6 +405,37 @@ class TestFlujoLimpieza(TestAPI):
             "fotos": ["data:text/html;base64,PHNjcmlwdD4="]})
         self.assertEqual(codigo, 400)
 
+    def test_el_control_devuelve_la_evidencia_de_cada_desvio(self):
+        """Reabrir un desvío tiene que mostrar lo que ya se fotografió.
+
+        Sin esto la tira de fotos aparecía vacía, el auditor volvía a sacar la
+        misma foto y el backend guardaba las dos: el hallazgo terminaba
+        duplicado en el informe del mes.
+        """
+        cid = self._control_nuevo("2021-06-01")
+        _, sectores = self.auditor("GET", "/api/sectores")
+        item = sectores["sectores"][0]["items"][0]["id"]
+        self.auditor("POST", f"/api/controles/{cid}/desvios", {
+            "item_id": item, "estado": "DESVIO_TOTAL",
+            "observacion": "Piso con residuos", "fotos": [PIXEL_PNG]})
+
+        codigo, est = self.auditor("GET", f"/api/controles/{cid}")
+        self.assertEqual(codigo, 200)
+        desvio = next(d for d in est["desvios"] if d["item_id"] == item)
+        self.assertEqual(len(desvio["fotos"]), 1)
+        # La ruta es lo que necesita el <img>; la marca de tiempo, el epígrafe.
+        self.assertTrue(desvio["fotos"][0]["archivo"])
+        self.assertTrue(desvio["fotos"][0]["tomada_en"])
+
+    def test_el_desvio_sin_foto_trae_una_lista_vacia(self):
+        cid = self._control_nuevo("2021-06-02")
+        _, sectores = self.auditor("GET", "/api/sectores")
+        item = sectores["sectores"][0]["items"][0]["id"]
+        self.auditor("POST", f"/api/controles/{cid}/desvios", {
+            "item_id": item, "estado": "DESVIO_TOTAL", "observacion": "Sin foto"})
+        _, est = self.auditor("GET", f"/api/controles/{cid}")
+        self.assertEqual(est["desvios"][0]["fotos"], [])
+
     def test_solo_admin_reabre(self):
         cid = self._control_nuevo("2020-08-01")
         _, sectores = self.auditor("GET", "/api/sectores")

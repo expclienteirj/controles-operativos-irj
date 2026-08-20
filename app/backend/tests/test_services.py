@@ -1535,6 +1535,61 @@ class TestEstadoModulos(Base):
                          inspect.signature(services.estado_modulos).parameters)
 
 
+class TestEvidenciaFotografica(Base):
+    """La evidencia tiene que poder volver a la pantalla que la generó.
+
+    Se guardaba bien desde siempre, pero ninguna respuesta de la API la
+    devolvía fuera de LoS, así que una foto sacada en una recorrida no se podía
+    volver a ver salvo abriendo el PDF del mes.
+    """
+
+    def _foto(self, entidad, entidad_id, archivo, subitem=None):
+        self.conn.execute(
+            "INSERT INTO fotos (entidad, entidad_id, subitem, archivo) "
+            "VALUES (?,?,?,?)", (entidad, entidad_id, subitem, archivo))
+        self.conn.commit()
+
+    def test_agrupa_por_entidad_en_una_sola_consulta(self):
+        self._foto("desvio", 1, "a.jpg", "piso")
+        self._foto("desvio", 1, "b.jpg", "zócalo")
+        self._foto("desvio", 2, "c.jpg")
+        fotos = services.fotos_por_entidad(self.conn, "desvio", [1, 2, 3])
+        self.assertEqual([f["archivo"] for f in fotos[1]], ["a.jpg", "b.jpg"])
+        self.assertEqual(fotos[1][0]["subitem"], "piso")
+        self.assertEqual([f["archivo"] for f in fotos[2]], ["c.jpg"])
+        self.assertNotIn(3, fotos)          # sin fotos, sin entrada
+
+    def test_no_confunde_entidades_distintas_con_el_mismo_id(self):
+        self._foto("desvio", 7, "del-desvio.jpg")
+        self._foto("los_medicion", 7, "de-los.jpg")
+        fotos = services.fotos_por_entidad(self.conn, "desvio", [7])
+        self.assertEqual([f["archivo"] for f in fotos[7]], ["del-desvio.jpg"])
+
+    def test_sin_ids_no_consulta(self):
+        self.assertEqual(services.fotos_por_entidad(self.conn, "desvio", []), {})
+        # Los nulos vienen de las NC de LoS, que no cuelgan de ningún desvío.
+        self.assertEqual(services.fotos_por_entidad(self.conn, "desvio", [None]), {})
+
+    def test_la_nc_pendiente_lleva_la_foto_de_su_desvio(self):
+        c = self._control(dia=1)
+        r = services.registrar_desvio(self.conn, c, self._item("sanidad"),
+                                      "DESVIO_TOTAL", "Piso con residuos",
+                                      self.auditor)
+        self._foto("desvio", r["desvio_id"], "2026-07/limpieza/x.jpg", "piso")
+
+        pend = services.nc_pendientes_anteriores(self.conn, f"{PERIODO}-05")
+        self.assertEqual(len(pend), 1)
+        self.assertEqual([f["archivo"] for f in pend[0]["fotos"]],
+                         ["2026-07/limpieza/x.jpg"])
+
+    def test_la_nc_sin_evidencia_trae_la_lista_vacia_y_no_falta_la_clave(self):
+        c = self._control(dia=1)
+        services.registrar_desvio(self.conn, c, self._item("sanidad"),
+                                  "DESVIO_TOTAL", "Piso con residuos", self.auditor)
+        pend = services.nc_pendientes_anteriores(self.conn, f"{PERIODO}-05")
+        self.assertEqual(pend[0]["fotos"], [])
+
+
 class TestNovedades(Base):
     """El centro de novedades se calcula al vuelo: no puede desfasarse."""
 
