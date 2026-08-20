@@ -1527,6 +1527,50 @@ class TestEstadoModulos(Base):
         r = services.estado_modulos(self.conn, date(2026, 7, 27))
         self.assertEqual(r["limpieza"], services.ESTADO_AL_DIA)
 
+    def test_el_rojo_dice_por_que(self):
+        """El color solo avisaba que algo faltaba y había que salir a buscarlo."""
+        self._todo_cargado()
+        self._auditar(range(1, 27))
+        self.conn.execute(
+            "UPDATE periodo_datos SET monto_adjudicado = NULL WHERE periodo = ?",
+            (PERIODO,))
+        self.conn.commit()
+        r = services.estado_modulos(self.conn, date(2026, 7, 26))
+        self.assertEqual(r["motivos"]["config"], "Falta el monto adjudicado")
+        # Informes no se arregla desde Informes: señala de dónde viene la falta.
+        self.assertIn("Configuración", r["motivos"]["informes"])
+
+    def test_lo_que_esta_en_verde_no_lleva_motivo(self):
+        self._todo_cargado()
+        self._auditar(range(1, 27))
+        r = services.estado_modulos(self.conn, date(2026, 7, 26))
+        self.assertEqual(r["limpieza"], services.ESTADO_AL_DIA)
+        self.assertIsNone(r["motivos"]["limpieza"])
+
+    def test_en_gris_tampoco_hay_motivo_pero_la_clave_existe(self):
+        """La pantalla lee `motivos[clave]` sin preguntar si la clave está."""
+        r = services.estado_modulos(self.conn, date(2026, 7, 25))
+        self.assertFalse(r["en_ventana"])
+        for modulo in ("limpieza", "los", "informes", "config"):
+            self.assertIsNone(r["motivos"][modulo], modulo)
+
+    def test_el_motivo_de_limpieza_cuenta_los_dias_sin_auditar(self):
+        self._todo_cargado()
+        self._auditar(range(1, 6))          # 5 de 31
+        r = services.estado_modulos(self.conn, date(2026, 7, 26))
+        self.assertEqual(r["limpieza"], services.ESTADO_FALTANTE)
+        self.assertIn("sin auditar", r["motivos"]["limpieza"])
+
+    def test_los_distingue_sin_relevar_de_no_cumple(self):
+        """Los dos frenan la liquidación, pero uno se resuelve cargando el dato
+        y el otro reclamándole al contratista."""
+        self._todo_cargado()
+        self._auditar(range(1, 27))
+        r = services.estado_modulos(self.conn, date(2026, 7, 26))
+        self.assertEqual(r["los"], services.ESTADO_FALTANTE)
+        self.assertIn("sin relevar", r["motivos"]["los"])
+        self.assertNotIn("no cumplen", r["motivos"]["los"])
+
     def test_el_semaforo_no_depende_del_rol(self):
         """Hay datos que solo carga el admin, pero el auditor tiene que ver que
         faltan: los ve en el resultado del mes de todos modos."""

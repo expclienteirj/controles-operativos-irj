@@ -210,6 +210,10 @@ button, .tocable { touch-action: manipulation; user-select: none; }
    Mismo rojo que ya usa .item.total para el día sin auditar. */
 .sector.total { border-color: var(--rojo); background: var(--rojo-fondo); }
 .sector.total .marca { background: var(--rojo); }
+/* El motivo del rojo. En el gris de la descripción se leía como una leyenda
+   más de la tarjeta; acá es lo único que el auditor tiene que leer para saber
+   adónde ir. --rojo llega a 4.5:1 sobre --rojo-fondo. */
+.sector .detalle.falta { color: var(--rojo); font-weight: 600; }
 
 /* -------------------------------------------------------------- botones -- */
 .btn {

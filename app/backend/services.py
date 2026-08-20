@@ -858,7 +858,11 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
         return {"periodo": periodo, "en_ventana": False,
                 "dia_inicio": dia_inicio,
                 "limpieza": ESTADO_SIN_VENTANA, "los": ESTADO_SIN_VENTANA,
-                "informes": ESTADO_SIN_VENTANA, "config": ESTADO_SIN_VENTANA}
+                "informes": ESTADO_SIN_VENTANA, "config": ESTADO_SIN_VENTANA,
+                # Misma forma siempre, para que la pantalla no tenga que
+                # preguntar si la clave existe antes de leerla.
+                "motivos": {"limpieza": None, "los": None,
+                            "informes": None, "config": None}}
 
     def semaforo(falta: bool) -> str:
         return ESTADO_FALTANTE if falta else ESTADO_AL_DIA
@@ -875,15 +879,33 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
     # La recorrida de HOY no cuenta como faltante: vence al final de su propio
     # día, así que el 27 a la mañana no falta nada todavía.
     limpieza = semaforo(not mes["cobertura_suficiente"])
+    motivo_limpieza = None
+    if limpieza == ESTADO_FALTANTE:
+        sin_auditar = len(mes["dias_vencidos_sin_control"])
+        motivo_limpieza = (
+            f"{sin_auditar} día(s) del mes sin auditar" if sin_auditar
+            else f"Cobertura {mes['cobertura'] * 100:.0f}%, por debajo del "
+                 f"{mes['cobertura_minima'] * 100:.0f}% mínimo")
 
     # -- Niveles de servicio ------------------------------------------------
+    sin_datos: list = []
+    no_cumplen: list = []
     try:
         dash = dashboard_los(conn, periodo)
-        falta_los = (bool(dash["items_sin_datos"])
-                     or any(i["estado"] == "NO_CUMPLE" for i in dash["items"]))
+        sin_datos = list(dash["items_sin_datos"])
+        no_cumplen = [i for i in dash["items"] if i["estado"] == "NO_CUMPLE"]
+        falta_los = bool(sin_datos or no_cumplen)
     except Exception:
         falta_los = False
     los = semaforo(falta_los)
+    # "Sin relevar" y "no cumple" van separados a propósito: los dos frenan la
+    # liquidación, pero uno se resuelve cargando el dato y el otro reclamándole
+    # al contratista. Decir solo "faltan 3 ítems" mandaría al auditor a cargar
+    # algo que ya está cargado.
+    motivo_los = " · ".join(filter(None, [
+        f"{len(sin_datos)} ítem(s) sin relevar" if sin_datos else None,
+        f"{len(no_cumplen)} ítem(s) no cumplen" if no_cumplen else None,
+    ])) or None
 
     # -- Datos del período que exige la certificación -----------------------
     fila = conn.execute("SELECT * FROM periodo_datos WHERE periodo = ?",
@@ -905,21 +927,45 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
         (periodo,)).fetchone()["c"]
     # El monto entra acá porque sin él hay porcentaje pero no hay importe, que
     # es lo único que el contratista termina cobrando.
+    inventario = db.inventario_pendiente(conn)
     falta_config = (faltan_obligatorios
                     or not d.get("monto_adjudicado")
                     or (activos and relevados < activos)
-                    or bool(db.inventario_pendiente(conn)))
+                    or bool(inventario))
     config = semaforo(falta_config)
+    # En orden de qué frena antes la liquidación: sin los obligatorios no hay
+    # certificación, sin monto hay porcentaje pero no importe, y el resto baja
+    # la calidad del dato sin impedirla.
+    motivo_config = None
+    if falta_config:
+        motivo_config = (
+            "Faltan datos obligatorios del período" if faltan_obligatorios
+            else "Falta el monto adjudicado" if not d.get("monto_adjudicado")
+            else f"{activos - relevados} insumo(s) sin relevar"
+            if activos and relevados < activos
+            else f"{len(inventario)} ítem(s) de inventario sin cargar")
 
     # -- Informes: el agregado, ¿se puede liquidar el mes? ------------------
     # Es la única de las cuatro que mira todo junto: emitir el PDF con un dato
     # menos no da un importe aproximado, da uno equivocado.
     informes = semaforo(falta_config or falta_los
                         or not mes["cobertura_suficiente"])
+    # No repite el motivo ajeno, señala de dónde viene: Informes no se arregla
+    # desde Informes, se arregla apagando las otras tarjetas.
+    motivo_informes = " y ".join(filter(None, [
+        "Configuración" if falta_config else None,
+        "Niveles de Servicio" if falta_los else None,
+        "Limpieza" if not mes["cobertura_suficiente"] else None,
+    ]))
+    motivo_informes = f"Faltan datos en {motivo_informes}" if motivo_informes else None
 
     return {"periodo": periodo, "en_ventana": True, "dia_inicio": dia_inicio,
             "limpieza": limpieza, "los": los,
-            "informes": informes, "config": config}
+            "informes": informes, "config": config,
+            # Por qué está en rojo cada una. Va al lado del color: el color solo
+            # dice que hay algo, y el auditor tenía que salir a buscar qué.
+            "motivos": {"limpieza": motivo_limpieza, "los": motivo_los,
+                        "informes": motivo_informes, "config": motivo_config}}
 
 
 def _resumen_control(conn: sqlite3.Connection, fila,

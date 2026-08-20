@@ -588,6 +588,21 @@ const App = (() => {
   const claseModulo = (modulos, clave) =>
     CLASE_MODULO[modulos && modulos[clave]] || 'pendiente';
 
+  /**
+   * Qué decir debajo del nombre del módulo.
+   *
+   * En rojo, el motivo pisa la descripción fija. La descripción explica qué es
+   * el módulo —algo que el auditor ya sabe— y el color solo avisaba que había
+   * un problema sin decir cuál, así que había que entrar a buscarlo. Fuera de
+   * la ventana de liquidación y en verde no hay motivo y vuelve la descripción.
+   */
+  const detalleModulo = (modulos, clave, descripcion) => {
+    const motivo = modulos && modulos.motivos && modulos.motivos[clave];
+    return motivo
+      ? `<span class="detalle falta">${UI.esc(motivo)}</span>`
+      : `<span class="detalle">${descripcion}</span>`;
+  };
+
   async function vistaInicio() {
     layout('Controles Operativos IRJ', usuario.nombre,
            '<div class="vacio">Cargando…</div>');
@@ -618,27 +633,30 @@ const App = (() => {
                 data-ir="/limpieza">
           <span class="marca">🧹</span>
           <span class="nombre">Limpieza</span>
-          <span class="detalle">Ver el historial diario del mes</span>
+          ${detalleModulo(hoy.modulos, 'limpieza',
+                          'Ver el historial diario del mes')}
         </button>
         <button class="sector ${claseModulo(hoy.modulos, 'los')}" data-ir="/los">
           <span class="marca">📋</span>
           <span class="nombre">Niveles de Servicio</span>
-          <span class="detalle">11 ítems del manual LoS</span>
+          ${detalleModulo(hoy.modulos, 'los', '11 ítems del manual LoS')}
         </button>
         <button class="sector ${claseModulo(hoy.modulos, 'informes')}"
                 data-ir="/informes">
           <span class="marca">📄</span>
           <span class="nombre">Informes</span>
-          <span class="detalle">PDF mensual y export de datos en CSV</span>
+          ${detalleModulo(hoy.modulos, 'informes',
+                          'PDF mensual y export de datos en CSV')}
         </button>
         ${usuario.rol === 'admin' ? `
           <button class="sector ${claseModulo(hoy.modulos, 'config')}"
                   data-ir="/config">
             <span class="marca">⚙</span>
             <span class="nombre">Configuración del Aeropuerto</span>
-            <span class="detalle">${onboarding && !onboarding.terminado
-              ? `Falta cargar ${onboarding.total - onboarding.completos} bloque(s) de inventario`
-              : 'Inventario, parámetros y datos del período'}</span>
+            ${detalleModulo(hoy.modulos, 'config',
+              onboarding && !onboarding.terminado
+                ? `Falta cargar ${onboarding.total - onboarding.completos} bloque(s) de inventario`
+                : 'Inventario, parámetros y datos del período')}
           </button>` : ''}
       </div>`;
 
