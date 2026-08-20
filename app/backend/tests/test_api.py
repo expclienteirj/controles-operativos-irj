@@ -1093,6 +1093,26 @@ class TestConfiguracion(TestAPI):
         self.assertTrue(datos["estructura_ok"])         # base de prueba sana
         self.assertEqual(datos["problemas"], [])
 
+    def test_version_detecta_una_columna_dada_de_baja_que_sigue_en_la_base(self):
+        """El caso simétrico, y el que más importa cuando la baja fue por el
+        dato en sí: la app anda igual —dejó de leer la columna— pero el valor
+        del contrato seguiría guardado en Postgres si el ALTER no se corrió."""
+        conn = db.conectar()
+        conn.execute("ALTER TABLE periodo_datos ADD COLUMN monto_adjudicado REAL")
+        conn.commit()
+        try:
+            _, datos = self.pedir("GET", "/api/version")
+            self.assertFalse(datos["estructura_ok"])
+            self.assertIn(
+                "periodo_datos.monto_adjudicado: dada de baja, sigue en la base",
+                datos["problemas"])
+        finally:
+            conn.execute("ALTER TABLE periodo_datos DROP COLUMN monto_adjudicado")
+            conn.commit()
+            conn.close()
+        _, datos = self.pedir("GET", "/api/version")
+        self.assertTrue(datos["estructura_ok"], datos["problemas"])
+
     def test_version_detecta_una_columna_que_no_admite_sin_dato(self):
         """La deriva que ninguna migración arregla sola: el esquema de Postgres
         se aplica a mano, así que una columna puede quedarse con un NOT NULL

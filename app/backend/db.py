@@ -519,6 +519,23 @@ def columna_obligatoria(conn, tabla: str, columna: str) -> bool:
     return bool(fila) and bool(fila["notnull"])
 
 
+def columna_existe(conn, tabla: str, columna: str) -> bool:
+    """¿La columna sigue estando en la base?
+
+    Contracara de `columna_obligatoria`, para las bajas. Una columna que el
+    código dejó de usar no rompe nada —por eso pasa desapercibida— pero sigue
+    guardando lo que contenga. Cuando se la dio de baja justamente para dejar
+    de guardar ese dato, seguir ahí es el problema entero.
+    """
+    if _es_postgres(conn):
+        return bool(conn.execute(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = ? AND column_name = ?",
+            (tabla, columna)).fetchone())
+    return any(f["name"] == columna
+               for f in conn.execute(f"PRAGMA table_info({tabla})"))
+
+
 def get_config(conn: sqlite3.Connection, clave: str, default=None):
     fila = conn.execute("SELECT valor FROM config WHERE clave = ?", (clave,)).fetchone()
     return json.loads(fila["valor"]) if fila else default

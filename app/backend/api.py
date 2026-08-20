@@ -202,6 +202,13 @@ CATALOGOS_SEMBRADOS = ("sectores_limpieza", "items_limpieza",
 # certificación.
 COLUMNAS_QUE_ADMITEN_SIN_DATO = (("periodo_datos", "horas_hombre_perdidas"),)
 
+# Columnas dadas de baja que no deben seguir en la base. `migrar()` las borra
+# en SQLite; en Postgres el ALTER va a mano y nadie se entera si no se corrió,
+# porque la app funciona igual: dejó de leerlas. El problema es que la columna
+# sigue guardando lo que tenga, y estas se dieron de baja justamente para que
+# el dato no esté. `monto_adjudicado` es el valor del contrato.
+COLUMNAS_DADAS_DE_BAJA = (("periodo_datos", "monto_adjudicado"),)
+
 
 def _claves_config_faltantes(conn) -> list[str]:
     """Claves de configuración que el seed define y la base no tiene.
@@ -249,6 +256,9 @@ def chequeos_estructurales(conn) -> list[str]:
         for tabla, columna in COLUMNAS_QUE_ADMITEN_SIN_DATO:
             if db.columna_obligatoria(conn, tabla, columna):
                 problemas.append(f"{tabla}.{columna}: no admite 'sin dato'")
+        for tabla, columna in COLUMNAS_DADAS_DE_BAJA:
+            if db.columna_existe(conn, tabla, columna):
+                problemas.append(f"{tabla}.{columna}: dada de baja, sigue en la base")
     except Exception:
         pass
     return problemas
