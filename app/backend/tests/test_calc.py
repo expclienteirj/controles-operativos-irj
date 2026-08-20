@@ -265,9 +265,10 @@ class TestCertificacion(unittest.TestCase):
         items["calidad_servicio"] = 0.0
         self.assertAlmostEqual(calc.certificacion_mensual(items, pesos)["porcentaje"], 0.70)
 
-    def test_importe_a_certificar(self):
-        self.assertEqual(calc.importe_a_certificar(0.95, 1_000_000), 950_000.0)
-        self.assertIsNone(calc.importe_a_certificar(0.95, None))
+    def test_el_modulo_no_calcula_importes(self):
+        """La app certifica el porcentaje; aplicarlo al valor adjudicado del
+        sitio es de quien liquida, en el sistema donde ese número ya vive."""
+        self.assertFalse([n for n in dir(calc) if "importe" in n])
 
     def test_certificacion_bloquea_si_falta_documentacion(self):
         """Requisito contractual: documentacion es obligatoria."""
@@ -793,9 +794,6 @@ class TestMesCompleto(unittest.TestCase):
                                           {"stock": 9, "punto_pedido": 5}]),
             "calidad_servicio": calc.item_calidad_servicio(general, nc=2)})
         self.assertLess(cert["porcentaje"], 1.0)
-        self.assertEqual(
-            calc.importe_a_certificar(cert["porcentaje"], 1_000_000),
-            round(cert["porcentaje"] * 1_000_000, 2))
 
 
 if __name__ == "__main__":

@@ -942,13 +942,11 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
     # es lo único que el contratista termina cobrando.
     inventario = db.inventario_pendiente(conn)
     falta_config = (faltan_obligatorios
-                    or not d.get("monto_adjudicado")
                     or (activos and relevados < activos)
                     or bool(inventario))
     config = semaforo(falta_config)
     # En orden de qué frena antes la liquidación: sin los obligatorios no hay
-    # certificación, sin monto hay porcentaje pero no importe, y el resto baja
-    # la calidad del dato sin impedirla.
+    # certificación, y el resto baja la calidad del dato sin impedirla.
     pend_config = []
     if faltan_obligatorios:
         campos = [n for c, n in (
@@ -964,12 +962,6 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
             "Faltan datos obligatorios del período",
             "Sin ellos la certificación no se emite: no sale más baja, no sale.",
             [{"nombre": c, "ruta": "/config/periodo"} for c in campos]))
-    if not d.get("monto_adjudicado"):
-        pend_config.append(_pendiente(
-            "Falta el monto adjudicado",
-            "Sin él hay porcentaje pero no importe, que es lo único que el "
-            "contratista cobra.",
-            [{"nombre": "Monto adjudicado", "ruta": "/config/periodo"}]))
     if activos and relevados < activos:
         pend_config.append(_pendiente(
             f"{activos - relevados} insumo(s) sin relevar",
@@ -1214,9 +1206,9 @@ def certificacion(conn: sqlite3.Connection, periodo: str,
     resultado["no_conformidades_abiertas"] = nc_abiertas
     resultado["calidad_base"] = resumen["porcentaje_general"]
     resultado["equipamiento"] = equipamiento
-    resultado["importe"] = calc.importe_a_certificar(
-        resultado["porcentaje"], datos.get("monto_adjudicado"))
-    resultado["monto_adjudicado"] = datos.get("monto_adjudicado")
+    # La certificación termina en el porcentaje. El importe se obtiene
+    # aplicándolo al valor adjudicado del sitio (PCP 4.3), y eso ocurre fuera
+    # de esta app: acá el número del contrato no se guarda ni se muestra.
     resultado["penalizacion_nc"] = {
         "activa": bool(activa),
         "por_nc": penalizacion,
@@ -1297,7 +1289,7 @@ def _advertencias_certificacion(conn, nc_abiertas, penalizacion, resultado,
             "codigo": "PENALIZACION_NC_DESACTIVADA",
             "nivel": "INFO",
             "mensaje": (
-                "Las no conformidades NO descuentan del importe a certificar. "
+                "Las no conformidades NO descuentan del porcentaje a certificar. "
                 "El PET indica que la calidad se ajusta según las no "
                 "conformidades pero no fija ninguna fórmula, así que no se "
                 "aplica ninguna. Se registran, se cuentan y se informan"
@@ -2485,7 +2477,7 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
                 f"{len(fuera)} máquina(s) fuera de servicio",
                 f"{fuera[0]['equipo']}" + (f" lleva {dias} día(s) de baja."
                                            if dias else " desde hoy.")
-                + " Descuenta del importe a certificar.",
+                + " Descuenta del porcentaje a certificar.",
                 cantidad=len(fuera), accion=ACCION_ALTA_MAQUINA,
                 datos={"bajas": [{"id": f.get("id"), "equipo": f["equipo"],
                                   "desde": f["desde"]} for f in fuera]})

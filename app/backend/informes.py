@@ -310,12 +310,14 @@ def informe_limpieza(conn: sqlite3.Connection, periodo: str,
 
     # -- certificación --
     inf.titulo_seccion('Certificación mensual')
+    # Sin importe en pesos: el informe certifica el porcentaje de cumplimiento,
+    # y aplicarlo al valor adjudicado del sitio (PCP 4.3) es de quien liquida.
+    # Este PDF se comparte con el contratista y no tiene por qué transportar el
+    # monto del contrato.
     inf.dato_grande(
         'Porcentaje a certificar',
         pct(cert['porcentaje']),
-        (f"$ {cert['importe']:,.2f}".replace(',', '@').replace('.', ',')
-         .replace('@', '.') if cert.get('importe') is not None
-         else 'monto adjudicado sin cargar'),
+        f"sobre {len(cert['detalle'])} ítems del pliego",
         VERDE if (cert['porcentaje'] or 0) >= 0.9 else AMBAR)
 
     filas = []

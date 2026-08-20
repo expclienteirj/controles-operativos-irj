@@ -309,6 +309,19 @@ def migrar(conn: sqlite3.Connection) -> list[str]:
         conn.execute("ALTER TABLE periodo_datos_nueva RENAME TO periodo_datos")
         aplicadas.append("periodo_datos: horas_hombre_perdidas admite sin dato")
 
+    # El monto adjudicado sale de la app. El pliego lo usa como base —el peso
+    # ponderado se toma sobre el valor adjudicado de cada sitio— pero no pide
+    # que sea esta herramienta la que lo guarde, y acá quedaba al alcance de
+    # cualquier auditor con sesión y se imprimía en el PDF que se comparte con
+    # el contratista. La app certifica el porcentaje; el importe lo calcula
+    # quien liquida, donde el valor del contrato ya vive.
+    #
+    # Se borra la columna, no solo el formulario: dejarla sería conservar el
+    # número en la base por el que se lo sacó de la pantalla.
+    if "monto_adjudicado" in columnas("periodo_datos"):
+        conn.execute("ALTER TABLE periodo_datos DROP COLUMN monto_adjudicado")
+        aplicadas.append("periodo_datos: baja de monto_adjudicado")
+
     # La evidencia LoS pasó a identificar qué sub-ítem retrata.
     if "subitem" not in columnas("fotos"):
         conn.execute("ALTER TABLE fotos ADD COLUMN subitem TEXT")

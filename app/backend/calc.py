@@ -370,10 +370,11 @@ def certificacion_mensual(items: dict[str, float | None],
             "items_sin_datos": faltantes, "detalle": detalle}
 
 
-def importe_a_certificar(porcentaje: float | None, monto_adjudicado: float | None):
-    if porcentaje is None or monto_adjudicado is None:
-        return None
-    return round(porcentaje * monto_adjudicado, 2)
+# El importe a certificar no se calcula acá. El pliego lo define —el peso
+# ponderado se toma sobre el valor adjudicado de cada sitio, PCP 4.3— pero no
+# pide que sea esta herramienta la que conozca ese valor. La app audita y
+# certifica el porcentaje; multiplicarlo por el monto del contrato es de quien
+# liquida, en el sistema donde ese número ya está y con sus permisos.
 
 
 # ---------------------------------------------------------------------------

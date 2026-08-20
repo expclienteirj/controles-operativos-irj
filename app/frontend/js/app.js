@@ -1157,9 +1157,7 @@ const App = (() => {
           ${Calc.porcentaje(cert.porcentaje)}
         </div>
         <div style="color:var(--gris);font-size:14px">
-          ${cert.importe !== null && cert.importe !== undefined
-            ? 'A certificar: $' + Number(cert.importe).toLocaleString('es-AR')
-            : 'Monto adjudicado sin cargar'}
+          Porcentaje a certificar del mes
         </div>
       </div>
 
@@ -1883,7 +1881,7 @@ const App = (() => {
       <p class="sub">Registrar días de baja</p>
       <div class="aviso advertencia">
         Los días de baja descuentan del ítem 4 de la certificación, que es
-        parte del importe a pagar al contratista.
+        parte del porcentaje a certificar del contratista.
       </div>
       <div class="campo">
         <label for="eq-desde">Desde</label>
@@ -1961,7 +1959,7 @@ const App = (() => {
       ${datos.bajas.length ? `
         <div class="aviso advertencia">
           Estos días descuentan del ítem 4 de la certificación. Corregir una
-          baja cambia el importe a certificar y queda registrado.
+          baja cambia el porcentaje a certificar y queda registrado.
         </div>
         <div class="lista-pendientes">${filas}</div>`
         : '<div class="aviso info">No hay bajas registradas en el período.</div>'}
@@ -2033,7 +2031,7 @@ const App = (() => {
           const ok = await UI.confirmar(
             'Eliminar la baja',
             `Se borra la baja de ${b.equipo} del ${b.desde}. Los días dejan de `
-            + 'descontar y el importe a certificar sube.',
+            + 'descontar y el porcentaje a certificar sube.',
             'Eliminar', 'btn-rojo');
           if (!ok) return;
           try {

@@ -529,13 +529,11 @@ class TestCertificacionAPI(TestAPI):
         # bloquea y no hay `detalle` que revisar.
         codigo, _ = self.admin("PUT", "/api/periodos/2031-01/datos", {
             "horas_hombre_programadas": 1000, "horas_hombre_perdidas": 50,
-            "documentacion_verificada": 1, "ley_19587_verificada": 1,
-            "monto_adjudicado": 5_000_000})
+            "documentacion_verificada": 1, "ley_19587_verificada": 1})
         self.assertEqual(codigo, 200)
 
         _, cert = self.auditor("GET", "/api/periodos/2031-01/certificacion")
         self.assertEqual(cert["detalle"]["programacion_trabajos"]["valor"], 0.95)
-        self.assertEqual(cert["monto_adjudicado"], 5_000_000)
 
     def test_auditor_no_carga_datos_del_periodo(self):
         codigo, _ = self.auditor("PUT", "/api/periodos/2031-02/datos",
@@ -561,10 +559,9 @@ class TestCertificacionAPI(TestAPI):
         """El contrato exige los tres ítems: la API no puede devolver un
         porcentaje redistribuyendo el peso de lo que falta."""
         self.admin("PUT", "/api/periodos/2031-07/datos",
-                   {"documentacion_verificada": 1, "monto_adjudicado": 5_000_000})
+                   {"documentacion_verificada": 1})
         _, cert = self.auditor("GET", "/api/periodos/2031-07/certificacion")
         self.assertIsNone(cert["porcentaje"])
-        self.assertIsNone(cert["importe"])
         self.assertCountEqual(cert["items_obligatorios_faltantes"],
                               ["ley_19587", "programacion_trabajos"])
 
@@ -1325,11 +1322,20 @@ class TestEquipamientoEInsumos(TestAPI):
 
     def test_datos_del_periodo_se_pueden_leer(self):
         self.admin("PUT", "/api/periodos/2033-05/datos",
-                   {"horas_hombre_programadas": 900, "monto_adjudicado": 123456})
+                   {"horas_hombre_programadas": 900})
         codigo, r = self.admin("GET", "/api/periodos/2033-05/datos")
         self.assertEqual(codigo, 200)
         self.assertEqual(r["datos"]["horas_hombre_programadas"], 900)
-        self.assertEqual(r["datos"]["monto_adjudicado"], 123456)
+        self.assertNotIn("monto_adjudicado", r["datos"])
+
+    def test_un_cliente_viejo_no_puede_reintroducir_el_monto(self):
+        """La lista blanca lo dejó afuera: sin esto un PUT con el campo viejo
+        haría un UPDATE sobre una columna que ya no existe."""
+        codigo, r = self.admin("PUT", "/api/periodos/2033-06/datos",
+                               {"monto_adjudicado": 123456})
+        self.assertEqual(codigo, 400)
+        self.assertIn("Nada para actualizar", r["error"])
+        self.assertNotIn("monto_adjudicado", r["error"])
 
     def test_periodo_sin_datos_devuelve_null(self):
         _, r = self.admin("GET", "/api/periodos/2098-01/datos")

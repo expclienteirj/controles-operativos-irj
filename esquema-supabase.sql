@@ -174,7 +174,6 @@ CREATE TABLE IF NOT EXISTS periodo_datos (
     
     
     
-    monto_adjudicado          REAL,
     cerrado                   INTEGER NOT NULL DEFAULT 0
 );
 

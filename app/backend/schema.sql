@@ -229,7 +229,6 @@ CREATE TABLE IF NOT EXISTS periodo_datos (
     -- El ítem 4 (maquinarias) se mide sobre el inventario de equipos, no sobre
     -- horas: ver calc.item_maquinarias. Las columnas de horas máquina se
     -- eliminaron porque no eran exigibles ni medibles.
-    monto_adjudicado          REAL,
     cerrado                   INTEGER NOT NULL DEFAULT 0
 );
 

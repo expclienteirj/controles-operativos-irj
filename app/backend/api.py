@@ -980,9 +980,12 @@ def get_certificacion(ctx, periodo):
 
 @ruta("PUT", r"/api/periodos/([\d-]+)/datos", rol="admin")
 def put_periodo_datos(ctx, periodo):
+    # Sin `monto_adjudicado`: el valor del contrato salió de la app a propósito
+    # (ver `db.migrar`). Queda fuera de la lista blanca para que un cliente
+    # viejo no lo reintroduzca escribiendo en una columna que ya no existe.
     campos = ("horas_hombre_programadas", "horas_hombre_perdidas",
               "documentacion_verificada", "hallazgos_documentacion",
-              "ley_19587_verificada", "hallazgos_ley_19587", "monto_adjudicado")
+              "ley_19587_verificada", "hallazgos_ley_19587")
     datos = {c: ctx["body"][c] for c in campos if c in ctx["body"]}
     if not datos:
         raise ErrorAPI(f"Nada para actualizar. Campos: {', '.join(campos)}")

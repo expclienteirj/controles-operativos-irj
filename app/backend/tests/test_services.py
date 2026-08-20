@@ -634,9 +634,9 @@ class TestCertificacion(Base):
         self._mes_completo()
         self.conn.execute(
             "INSERT INTO periodo_datos (periodo, horas_hombre_programadas, "
-            "horas_hombre_perdidas, monto_adjudicado, "
+            "horas_hombre_perdidas, "
             "documentacion_verificada, ley_19587_verificada) "
-            "VALUES (?,1000,0,1000000,1,1)", (PERIODO,))
+            "VALUES (?,1000,0,1,1)", (PERIODO,))
         cur = self.conn.execute(
             "INSERT INTO insumos (nombre, punto_pedido) VALUES ('Detergente', 10)")
         self.conn.execute(
@@ -646,7 +646,6 @@ class TestCertificacion(Base):
 
         r = services.certificacion(self.conn, PERIODO)
         self.assertAlmostEqual(r["porcentaje"], 1.0)
-        self.assertEqual(r["importe"], 1_000_000.0)
         self.assertEqual(r["items_sin_datos"], [])
 
     def test_falta_un_item_obligatorio_y_no_certifica(self):
@@ -656,7 +655,6 @@ class TestCertificacion(Base):
         self._mes_completo()
         r = services.certificacion(self.conn, PERIODO)
         self.assertIsNone(r["porcentaje"])
-        self.assertIsNone(r["importe"])
         self.assertEqual(r["detalle"], {})
         for clave in ("documentacion", "ley_19587", "programacion_trabajos"):
             self.assertIn(clave, r["items_obligatorios_faltantes"])
@@ -866,10 +864,14 @@ class TestCertificacion(Base):
         self.assertEqual(aviso["nivel"], "BLOQUEANTE")
         self.assertIn("Documentación obligatoria", aviso["mensaje"])
 
-    def test_sin_monto_no_hay_importe(self):
+    def test_la_certificacion_no_transporta_plata(self):
+        """El valor adjudicado salió de la app: el pliego lo usa como base del
+        cálculo (PCP 4.3) pero no pide que esta herramienta lo conozca, y acá
+        quedaba al alcance de cualquier auditor con sesión."""
         self._mes_completo()
         r = services.certificacion(self.conn, PERIODO)
-        self.assertIsNone(r["importe"])
+        self.assertNotIn("importe", r)
+        self.assertNotIn("monto_adjudicado", r)
 
 
 class TestLoS(Base):
@@ -1426,8 +1428,8 @@ class TestEstadoModulos(Base):
         self.conn.execute(
             "INSERT INTO periodo_datos (periodo, documentacion_verificada, "
             "ley_19587_verificada, horas_hombre_programadas, "
-            "horas_hombre_perdidas, monto_adjudicado) "
-            "VALUES (?,1,1,1000,0,500000)", (PERIODO,))
+            "horas_hombre_perdidas) "
+            "VALUES (?,1,1,1000,0)", (PERIODO,))
         # Insumos del mes: sin stock relevado el ítem 5 queda sin datos.
         for f in self.conn.execute("SELECT id FROM insumos WHERE activo = 1"):
             self.conn.execute(
@@ -1506,18 +1508,14 @@ class TestEstadoModulos(Base):
         self.assertEqual(r["limpieza"], services.ESTADO_FALTANTE)
         self.assertEqual(r["informes"], services.ESTADO_FALTANTE)
 
-    def test_falta_el_monto_adjudicado_y_ya_es_rojo(self):
-        """Sin monto hay porcentaje pero no hay importe, que es lo único que el
-        contratista cobra."""
+    def test_el_monto_adjudicado_ya_no_traba_la_liquidacion(self):
+        """El valor del contrato salió de la app: no lo guarda, no lo muestra
+        y no lo exige. El semáforo no puede seguir esperándolo."""
         self._todo_cargado()
         self._auditar(range(1, 27))
-        self.conn.execute(
-            "UPDATE periodo_datos SET monto_adjudicado = NULL WHERE periodo = ?",
-            (PERIODO,))
-        self.conn.commit()
         r = services.estado_modulos(self.conn, date(2026, 7, 26))
-        self.assertEqual(r["config"], services.ESTADO_FALTANTE)
-        self.assertEqual(r["informes"], services.ESTADO_FALTANTE)
+        self.assertEqual(r["config"], services.ESTADO_AL_DIA)
+        self.assertNotIn("monto", (r["motivos"]["config"] or "").lower())
 
     def test_la_recorrida_de_hoy_no_cuenta_como_faltante(self):
         """El 27 a la mañana quedan las horas del día para recorrer: exigirla ya
@@ -1532,11 +1530,12 @@ class TestEstadoModulos(Base):
         self._todo_cargado()
         self._auditar(range(1, 27))
         self.conn.execute(
-            "UPDATE periodo_datos SET monto_adjudicado = NULL WHERE periodo = ?",
-            (PERIODO,))
+            "UPDATE periodo_datos SET documentacion_verificada = 0 "
+            "WHERE periodo = ?", (PERIODO,))
         self.conn.commit()
         r = services.estado_modulos(self.conn, date(2026, 7, 26))
-        self.assertEqual(r["motivos"]["config"], "Falta el monto adjudicado")
+        self.assertEqual(r["motivos"]["config"],
+                         "Faltan datos obligatorios del período")
         # Informes no se arregla desde Informes: señala de dónde viene la falta.
         self.assertIn("Configuración", r["motivos"]["informes"])
 
@@ -1580,8 +1579,8 @@ class TestEstadoModulos(Base):
         self._todo_cargado()
         self._auditar(range(1, 27))
         self.conn.execute(
-            "UPDATE periodo_datos SET monto_adjudicado = NULL WHERE periodo = ?",
-            (PERIODO,))
+            "UPDATE periodo_datos SET documentacion_verificada = 0 "
+            "WHERE periodo = ?", (PERIODO,))
         self.conn.commit()
         r = services.estado_modulos(self.conn, date(2026, 7, 26))
         for modulo in ("limpieza", "los", "config"):
@@ -1597,8 +1596,8 @@ class TestEstadoModulos(Base):
         self._todo_cargado()
         self._auditar(range(1, 27))
         self.conn.execute(
-            "UPDATE periodo_datos SET monto_adjudicado = NULL WHERE periodo = ?",
-            (PERIODO,))
+            "UPDATE periodo_datos SET documentacion_verificada = 0 "
+            "WHERE periodo = ?", (PERIODO,))
         self.conn.commit()
         r = services.estado_modulos(self.conn, date(2026, 7, 26))
         rutas = [i["ruta"] for p in r["pendientes"]["informes"] for i in p["items"]]

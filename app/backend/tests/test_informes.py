@@ -197,32 +197,32 @@ class TestInformeLimpieza(BaseInformes):
         for item in informes.NOMBRE_ITEM_CERT.values():
             self.assertIn(item, t)
 
-    def test_muestra_el_importe_cuando_hay_monto_cargado(self):
+    def test_el_informe_certifica_porcentaje_y_no_lleva_importes(self):
+        """Este PDF se firma y se comparte con el contratista: no tiene por qué
+        transportar el monto del contrato. El porcentaje se aplica al valor
+        adjudicado del sitio (PCP 4.3) fuera de esta app."""
         for d in range(1, 29):
             self._dia_completo(d)
         self.conn.execute(
             "INSERT INTO periodo_datos (periodo, horas_hombre_programadas, "
-            "horas_hombre_perdidas, monto_adjudicado, "
+            "horas_hombre_perdidas, "
             "documentacion_verificada, ley_19587_verificada) "
-            "VALUES (?,1000,0,1000000,1,1)", (PERIODO,))
+            "VALUES (?,1000,0,1,1)", (PERIODO,))
         self.conn.commit()
         t = texto_pdf(informes.informe_limpieza(self.conn, PERIODO))
-        self.assertIn("1.000.000,00", t)
-
-    def test_sin_monto_lo_aclara_en_vez_de_mostrar_cero(self):
-        self._dia_completo(1)
-        t = texto_pdf(informes.informe_limpieza(self.conn, PERIODO))
-        self.assertIn("monto adjudicado sin cargar", t)
+        self.assertIn("Porcentaje a certificar", t)
+        self.assertNotIn("$", t)
+        self.assertNotIn("monto adjudicado", t.lower())
 
     def test_el_pdf_dice_que_las_nc_no_descuentan(self):
         """Con el descuento desactivado, el informe tiene que decirlo.
 
         Quien lee un informe con no conformidades da por sentado que algo
-        descontaron: callarlo dejaría creer que el importe ya las contempla.
+        descontaron: callarlo dejaría creer que el porcentaje ya las contempla.
         """
         self._dia_completo(1, desvio="Algo mal")
         t = texto_pdf(informes.informe_limpieza(self.conn, PERIODO))
-        self.assertIn("NO descuentan del importe", t)
+        self.assertIn("NO descuentan del porcentaje", t)
 
     def test_arrastra_la_advertencia_de_penalizacion_provisoria(self):
         """Y si se la activa, el PDF advierte que el criterio no es del pliego."""

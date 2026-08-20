@@ -547,13 +547,13 @@ const Config = (() => {
           El PET indica que la calidad se ajusta por la cantidad de no
           conformidades pero no fija la fórmula. Por eso el descuento viene
           <strong>desactivado</strong>: las NC se registran e informan, pero no
-          bajan el importe. Activalo solo si se negocia un criterio con el
+          bajan el porcentaje. Activalo solo si se negocia un criterio con el
           contratista, y marcá la casilla de confirmado.
         </div>
         ${campoConfig({ clave: 'penalizacion_nc_activa', tipo: 'booleano',
                         etiqueta: 'Aplicar descuento por no conformidades',
                         ayuda: 'Desactivado, las NC se registran e informan '
-                             + 'pero no descuentan del importe. Activar solo '
+                             + 'pero no descuentan del porcentaje. Activar solo '
                              + 'si se acordó un criterio con el contratista: '
                              + 'el pliego no fija ninguna fórmula.' },
                       cfg.penalizacion_nc_activa)}
@@ -801,14 +801,6 @@ const Config = (() => {
           <input id="pd-hhp" type="number" min="0" step="0.5"
                  value="${d.horas_hombre_perdidas ?? ''}">
         </div>
-        <div class="campo">
-          <label for="pd-monto">Monto mensual adjudicado
-            <span class="ayuda">Sin él la certificación sale en porcentaje pero
-              sin importe, y el mes no se puede liquidar.</span></label>
-          <input id="pd-monto" type="number" min="0" step="0.01"
-                 value="${d.monto_adjudicado ?? ''}">
-        </div>
-
         <h3 style="font-size:14px;margin:18px 0 8px">Ítems binarios</h3>
         <div class="aviso info">
           Estos ítems dan 100% con cero hallazgos. Para que "nadie los revisó"
@@ -886,7 +878,6 @@ const Config = (() => {
         // Sin `|| 0`: ese atajo convertía el campo vacío en un cero, que es
         // justamente lo que hacía indistinguible "sin cargar" de "sin pérdidas".
         horas_hombre_perdidas: num('#pd-hhp'),
-        monto_adjudicado: num('#pd-monto'),
         documentacion_verificada: parseInt($('#pd-docv').value, 10),
         hallazgos_documentacion: num('#pd-doch') || 0,
         ley_19587_verificada: parseInt($('#pd-leyv').value, 10),
