@@ -704,6 +704,23 @@ input.invalido { border-color: var(--rojo); background: var(--rojo-fondo); }
 .aviso.error { background: var(--rojo-fondo); border-color: var(--rojo); }
 .aviso strong { display: block; margin-bottom: 2px; }
 
+/* Pendientes de liquidación, arriba de la pantalla del módulo. Cada uno lleva
+   su explicación y los accesos directos a lo que hay que tocar: el objetivo es
+   que el auditor no tenga que salir a buscar qué significaba el rojo. */
+.aviso.pendientes .pendiente { margin-top: 10px; }
+.aviso.pendientes .pendiente:first-of-type { margin-top: 6px; }
+.pendiente-titulo { font-weight: 600; font-size: 14px; }
+.pendiente-detalle { margin: 2px 0 8px; font-size: 13px; color: var(--gris); }
+/* Chip tocable: mismo aspecto que .chip-falta pero con área táctil, porque
+   éste navega. El de inventario es una etiqueta y no se toca. */
+.aviso.pendientes .chip {
+  background: var(--blanco); color: var(--amarillo);
+  border: 1px solid var(--amarillo); border-radius: 999px;
+  padding: 8px 14px; min-height: 40px; font-size: 13px; font-weight: 600;
+  cursor: pointer;
+}
+.aviso.pendientes .chip:disabled { cursor: default; opacity: .7; }
+
 /* Avisos secundarios (ej.: certificación) plegados detrás de un resumen, para
    que no compitan en peso visual con el más relevante. */
 .detalle-avisos { margin-bottom: 12px; }

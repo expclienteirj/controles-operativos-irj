@@ -861,6 +861,8 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
                 "informes": ESTADO_SIN_VENTANA, "config": ESTADO_SIN_VENTANA,
                 # Misma forma siempre, para que la pantalla no tenga que
                 # preguntar si la clave existe antes de leerla.
+                "pendientes": {"limpieza": [], "los": [],
+                               "informes": [], "config": []},
                 "motivos": {"limpieza": None, "los": None,
                             "informes": None, "config": None}}
 
@@ -879,13 +881,15 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
     # La recorrida de HOY no cuenta como faltante: vence al final de su propio
     # día, así que el 27 a la mañana no falta nada todavía.
     limpieza = semaforo(not mes["cobertura_suficiente"])
-    motivo_limpieza = None
+    pend_limpieza = []
     if limpieza == ESTADO_FALTANTE:
         sin_auditar = len(mes["dias_vencidos_sin_control"])
-        motivo_limpieza = (
-            f"{sin_auditar} día(s) del mes sin auditar" if sin_auditar
-            else f"Cobertura {mes['cobertura'] * 100:.0f}%, por debajo del "
-                 f"{mes['cobertura_minima'] * 100:.0f}% mínimo")
+        pend_limpieza.append(_pendiente(
+            f"Cobertura del mes en {mes['cobertura'] * 100:.0f}%, por debajo "
+            f"del {mes['cobertura_minima'] * 100:.0f}% mínimo",
+            f"{sin_auditar} día(s) vencidos sin recorrida. No se pueden cargar "
+            "a posteriori: la cobertura del mes ya quedó fijada."
+            if sin_auditar else None))
 
     # -- Niveles de servicio ------------------------------------------------
     sin_datos: list = []
@@ -900,12 +904,21 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
     los = semaforo(falta_los)
     # "Sin relevar" y "no cumple" van separados a propósito: los dos frenan la
     # liquidación, pero uno se resuelve cargando el dato y el otro reclamándole
-    # al contratista. Decir solo "faltan 3 ítems" mandaría al auditor a cargar
-    # algo que ya está cargado.
-    motivo_los = " · ".join(filter(None, [
-        f"{len(sin_datos)} ítem(s) sin relevar" if sin_datos else None,
-        f"{len(no_cumplen)} ítem(s) no cumplen" if no_cumplen else None,
-    ])) or None
+    # al contratista. Juntarlos mandaría al auditor a cargar algo que ya está
+    # cargado.
+    pend_los = []
+    if sin_datos:
+        pend_los.append(_pendiente(
+            f"{len(sin_datos)} ítem(s) del manual sin relevar",
+            "Sin el dato el ítem no cuenta como cumplido: queda en Sin datos.",
+            [{"clave": i, "nombre": i, "ruta": f"/los/{i}"} for i in sin_datos]))
+    if no_cumplen:
+        pend_los.append(_pendiente(
+            f"{len(no_cumplen)} ítem(s) relevados que no cumplen",
+            "El dato está cargado y da por debajo del objetivo. No se resuelve "
+            "cargando nada: es un incumplimiento a reclamar.",
+            [{"clave": i["clave"], "nombre": i["nombre"],
+              "ruta": f"/los/{i['clave']}"} for i in no_cumplen]))
 
     # -- Datos del período que exige la certificación -----------------------
     fila = conn.execute("SELECT * FROM periodo_datos WHERE periodo = ?",
@@ -936,36 +949,90 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
     # En orden de qué frena antes la liquidación: sin los obligatorios no hay
     # certificación, sin monto hay porcentaje pero no importe, y el resto baja
     # la calidad del dato sin impedirla.
-    motivo_config = None
-    if falta_config:
-        motivo_config = (
-            "Faltan datos obligatorios del período" if faltan_obligatorios
-            else "Falta el monto adjudicado" if not d.get("monto_adjudicado")
-            else f"{activos - relevados} insumo(s) sin relevar"
-            if activos and relevados < activos
-            else f"{len(inventario)} ítem(s) de inventario sin cargar")
+    pend_config = []
+    if faltan_obligatorios:
+        campos = [n for c, n in (
+            ("documentacion_verificada", "Documentación obligatoria"),
+            ("ley_19587_verificada", "Ley 19587 (seguridad e higiene)"),
+            ("horas_hombre_programadas", "Horas hombre programadas"),
+        ) if not d.get(c)]
+        # Cero horas perdidas es un valor legítimo; vacío no. Se compara contra
+        # None para no confundir "el mejor mes posible" con "nadie lo cargó".
+        if d.get("horas_hombre_perdidas") is None:
+            campos.append("Horas hombre perdidas")
+        pend_config.append(_pendiente(
+            "Faltan datos obligatorios del período",
+            "Sin ellos la certificación no se emite: no sale más baja, no sale.",
+            [{"nombre": c, "ruta": "/config/periodo"} for c in campos]))
+    if not d.get("monto_adjudicado"):
+        pend_config.append(_pendiente(
+            "Falta el monto adjudicado",
+            "Sin él hay porcentaje pero no importe, que es lo único que el "
+            "contratista cobra.",
+            [{"nombre": "Monto adjudicado", "ruta": "/config/periodo"}]))
+    if activos and relevados < activos:
+        pend_config.append(_pendiente(
+            f"{activos - relevados} insumo(s) sin relevar",
+            "Alimentan el ítem 5 de la certificación.",
+            [{"nombre": "Stock de insumos", "ruta": "/config/periodo"}]))
+    if inventario:
+        pend_config.append(_pendiente(
+            f"{len(inventario)} ítem(s) de inventario sin cargar",
+            "Hasta cargarlos, los ítems LoS que dependen del inventario quedan "
+            "en Sin datos.",
+            [{"nombre": p["item"], "ruta": "/config/inventario"}
+             for p in inventario]))
 
     # -- Informes: el agregado, ¿se puede liquidar el mes? ------------------
     # Es la única de las cuatro que mira todo junto: emitir el PDF con un dato
     # menos no da un importe aproximado, da uno equivocado.
     informes = semaforo(falta_config or falta_los
                         or not mes["cobertura_suficiente"])
-    # No repite el motivo ajeno, señala de dónde viene: Informes no se arregla
-    # desde Informes, se arregla apagando las otras tarjetas.
-    motivo_informes = " y ".join(filter(None, [
-        "Configuración" if falta_config else None,
-        "Niveles de Servicio" if falta_los else None,
-        "Limpieza" if not mes["cobertura_suficiente"] else None,
-    ]))
-    motivo_informes = f"Faltan datos en {motivo_informes}" if motivo_informes else None
+    # No repite el detalle ajeno, remite: Informes no se arregla desde
+    # Informes, se arregla apagando los otros módulos.
+    pend_informes = [
+        _pendiente(f"Faltan datos en {nombre}", None,
+                   [{"nombre": nombre, "ruta": ruta}])
+        for falta, nombre, ruta in (
+            (falta_config, "Configuración del Aeropuerto", "/config"),
+            (falta_los, "Niveles de Servicio", "/los"),
+            (not mes["cobertura_suficiente"], "Limpieza", "/limpieza"),
+        ) if falta]
+
+    pendientes = {"limpieza": pend_limpieza, "los": pend_los,
+                  "informes": pend_informes, "config": pend_config}
+
+    motivos = {k: _motivo(v) for k, v in pendientes.items()}
+    # Informes lleva su propio resumen: encadenar sus títulos daría "Faltan
+    # datos en Configuración · Faltan datos en Niveles de Servicio", que no
+    # entra en la tarjeta y repite tres veces lo mismo. La condición sigue
+    # siendo la misma que arma `pend_informes`.
+    if pend_informes:
+        motivos["informes"] = "Faltan datos en " + " y ".join(
+            p["items"][0]["nombre"] for p in pend_informes)
 
     return {"periodo": periodo, "en_ventana": True, "dia_inicio": dia_inicio,
             "limpieza": limpieza, "los": los,
             "informes": informes, "config": config,
-            # Por qué está en rojo cada una. Va al lado del color: el color solo
-            # dice que hay algo, y el auditor tenía que salir a buscar qué.
-            "motivos": {"limpieza": motivo_limpieza, "los": motivo_los,
-                        "informes": motivo_informes, "config": motivo_config}}
+            # El detalle de qué falta, para que cada módulo lo muestre al
+            # entrar. Antes había que ir a buscarlo al centro de novedades.
+            "pendientes": pendientes,
+            # Resumen de una línea para la tarjeta de inicio, derivado del
+            # mismo detalle: no pueden decir cosas distintas.
+            "motivos": motivos}
+
+
+def _pendiente(titulo: str, detalle: str | None = None,
+               items: list | None = None) -> dict:
+    """Un pendiente de liquidación, con lo que hace falta para entenderlo."""
+    return {"titulo": titulo, "detalle": detalle, "items": items or []}
+
+
+def _motivo(pendientes: list) -> str | None:
+    """Los pendientes de un módulo, en una línea, para la tarjeta de inicio."""
+    if not pendientes:
+        return None
+    return " · ".join(p["titulo"] for p in pendientes)
 
 
 def _resumen_control(conn: sqlite3.Connection, fila,

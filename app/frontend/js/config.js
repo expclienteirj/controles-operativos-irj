@@ -135,6 +135,10 @@ const Config = (() => {
         </div>`);
     }
 
+    // Qué falta para liquidar. Es opcional: si no llega, la pantalla abre
+    // igual — no poder decir qué falta no es motivo para no dejar configurar.
+    const liquidacion = await API.get('/api/liquidacion').catch(() => null);
+
     try {
       onboarding = await API.get('/api/onboarding');
     } catch (e) {
@@ -147,6 +151,9 @@ const Config = (() => {
     }
 
     $('.contenido').innerHTML = `
+      ${UI.avisoPendientes(
+        liquidacion && liquidacion.pendientes && liquidacion.pendientes.config,
+        (ruta) => ir(ruta))}
       ${bannerOnboarding()}
       <div class="pestanas" id="pestanas">
         ${PESTANAS
@@ -796,8 +803,8 @@ const Config = (() => {
         </div>
         <div class="campo">
           <label for="pd-monto">Monto mensual adjudicado
-            <span class="ayuda">Opcional. Si se carga, el informe muestra el
-              importe a certificar.</span></label>
+            <span class="ayuda">Sin él la certificación sale en porcentaje pero
+              sin importe, y el mes no se puede liquidar.</span></label>
           <input id="pd-monto" type="number" min="0" step="0.01"
                  value="${d.monto_adjudicado ?? ''}">
         </div>

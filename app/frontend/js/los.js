@@ -16,6 +16,7 @@ const LoS = (() => {
   // servidor rechaza una fecha en un ítem que no la admite.
   let fechaItem = null;
   let fotosItem = [];           // evidencia ya guardada del ítem que se abre
+  let pendientesLiquidacion = [];
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -72,13 +73,20 @@ const LoS = (() => {
 
     const estado = { desdeCache: false };
     try {
-      const [dash, actual, listaItems] = await Promise.all([
+      const [dash, actual, listaItems, liquidacion] = await Promise.all([
         leerConCache(`/api/los/dashboard?periodo=${periodo}`,
                      `cache:los-dashboard:${periodo}`, estado),
         leerConCache(`/api/los/relevamientos/actual?periodo=${periodo}`,
                      `cache:los-relevamiento:${periodo}`, estado),
         leerConCache('/api/los/items', 'cache:los-items', estado),
+        // Qué falta para liquidar. Va en el mismo lote y no encadenado: es
+        // accesorio, y hacerle esperar el dashboard sería pagar un viaje más
+        // de red en la pantalla que el auditor abre en plataforma.
+        leerConCache('/api/liquidacion', 'cache:liquidacion', estado)
+          .catch(() => null),
       ]);
+      pendientesLiquidacion = (liquidacion && liquidacion.pendientes
+                               && liquidacion.pendientes.los) || [];
       relevamiento = actual.relevamiento;
       mediciones = actual.mediciones || {};
       items = listaItems.items;
@@ -132,6 +140,9 @@ const LoS = (() => {
               : Math.round(dash.porcentaje * 100) + '%';
 
     layout('Niveles de Servicio', UI.nombrePeriodo(periodo), `
+      ${UI.avisoPendientes(
+        pendientesLiquidacion, (ruta) => ir(ruta))}
+
       ${cerrado ? `<div class="aviso info">
         <strong>Relevamiento cerrado</strong>
         Cerrado el ${UI.esc(UI.fecha(relevamiento.cerrado_en))}. No admite cambios.

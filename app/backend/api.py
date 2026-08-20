@@ -316,6 +316,18 @@ def get_onboarding(ctx):
     return services.estado_onboarding(ctx["conn"])
 
 
+@ruta("GET", r"/api/liquidacion")
+def get_liquidacion(ctx):
+    """Qué le falta a cada módulo para poder liquidar el mes.
+
+    La pantalla de inicio ya lo recibe dentro de `/api/controles/hoy`, pero
+    cada módulo lo necesita al entrar: el color en la tarjeta dice que falta
+    algo y el detalle tiene que estar donde el auditor va a resolverlo, no en
+    otra pantalla.
+    """
+    return services.estado_modulos(ctx["conn"])
+
+
 @ruta("GET", r"/api/inventario/pendiente")
 def inventario_pendiente(ctx):
     return {"pendientes": db.inventario_pendiente(ctx["conn"])}

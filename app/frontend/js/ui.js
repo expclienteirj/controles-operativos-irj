@@ -299,6 +299,54 @@ const UI = (() => {
     });
   }
 
+  /* ------------------------------------------ pendientes de liquidación -- */
+
+  /**
+   * Qué le falta a este módulo para poder liquidar el mes.
+   *
+   * Va arriba de todo en la pantalla del módulo, no en el centro de novedades:
+   * el color de la tarjeta de inicio avisa que falta algo, y el detalle tiene
+   * que estar donde el auditor entra a resolverlo. Mandarlo a otra pantalla a
+   * averiguar qué era convierte un aviso en una búsqueda.
+   *
+   * Devuelve '' cuando no hay nada pendiente —o cuando todavía no se abrió la
+   * ventana de liquidación—, así la pantalla lo interpola sin preguntar.
+   */
+  function avisoPendientes(pendientes, alIr) {
+    if (!pendientes || !pendientes.length) return '';
+    const id = `pend-${Math.random().toString(36).slice(2, 8)}`;
+    const html = `
+      <div class="aviso advertencia pendientes" id="${id}">
+        <strong>Falta para liquidar el mes</strong>
+        ${pendientes.map((p) => `
+          <div class="pendiente">
+            <div class="pendiente-titulo">${esc(p.titulo)}</div>
+            ${p.detalle ? `<p class="pendiente-detalle">${esc(p.detalle)}</p>` : ''}
+            ${(p.items || []).length ? `
+              <div class="chips">
+                ${p.items.map((i) => `<button type="button" class="chip"
+                    data-pend-ir="${esc(i.ruta || '')}">${esc(i.nombre)}</button>`
+                  ).join('')}
+              </div>` : ''}
+          </div>`).join('')}
+      </div>`;
+
+    // El enganche corre en el próximo tick: quien llama recién va a interpolar
+    // este HTML, así que los botones todavía no existen en el documento.
+    if (alIr) {
+      setTimeout(() => {
+        const caja = document.getElementById(id);
+        if (!caja) return;
+        caja.querySelectorAll('[data-pend-ir]').forEach((b) => {
+          const ruta = b.dataset.pendIr;
+          if (ruta) b.onclick = () => alIr(ruta);
+          else b.disabled = true;
+        });
+      });
+    }
+    return html;
+  }
+
   /* ------------------------------------------------- evidencia ya guardada -- */
 
   /**
@@ -577,7 +625,8 @@ const UI = (() => {
 
   return { esc, toast, toastDeshacer, toastAccion,
            abrirHoja, cerrarHoja, cerrarTodas, cerrarParaNavegar,
-           confirmar, tomarFoto, galeria, visorFotos, calendarioMes,
+           confirmar, tomarFoto, galeria, visorFotos, avisoPendientes,
+           calendarioMes,
            comprimirImagen, fecha, fechaLarga, fechaCorta, hora,
            hoyISO, ahoraISO, periodoActual, nombrePeriodo };
 })();

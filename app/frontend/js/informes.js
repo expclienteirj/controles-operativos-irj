@@ -66,7 +66,15 @@ const Informes = (() => {
       controles = (await API.get(`/api/controles?periodo=${periodo}`)).controles;
     } catch (e) { /* el informe mensual sigue disponible */ }
 
+    // Qué falta para liquidar. Acá importa más que en ningún otro módulo: el
+    // PDF se emite igual con datos incompletos, y el número que sale de él es
+    // el que se le paga al contratista.
+    const liq = await API.get('/api/liquidacion').catch(() => null);
+    const pendientes = periodo === UI.periodoActual() && liq && liq.pendientes
+      ? liq.pendientes.informes : [];
+
     $('.contenido').innerHTML = `
+      ${UI.avisoPendientes(pendientes, (ruta) => ir(ruta))}
       ${selectorPeriodo()}
       ${tarjetaLimpieza(resumen, cert)}
       ${tarjetaDia(controles)}

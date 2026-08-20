@@ -1559,7 +1559,53 @@ class TestEstadoModulos(Base):
         self._auditar(range(1, 6))          # 5 de 31
         r = services.estado_modulos(self.conn, date(2026, 7, 26))
         self.assertEqual(r["limpieza"], services.ESTADO_FALTANTE)
-        self.assertIn("sin auditar", r["motivos"]["limpieza"])
+        # El título dice qué traba; el detalle, por qué no tiene arreglo.
+        pend = r["pendientes"]["limpieza"][0]
+        self.assertIn("Cobertura", pend["titulo"])
+        self.assertIn("sin recorrida", pend["detalle"])
+
+    def test_el_detalle_lista_los_items_de_los_para_ir_directo(self):
+        """El aviso del módulo no puede decir "3 ítems" y hacer buscar cuáles."""
+        self._todo_cargado()
+        self._auditar(range(1, 27))
+        r = services.estado_modulos(self.conn, date(2026, 7, 26))
+        items = r["pendientes"]["los"][0]["items"]
+        self.assertTrue(items)
+        for i in items:
+            self.assertTrue(i["nombre"])
+            self.assertTrue(i["ruta"].startswith("/los/"))
+
+    def test_el_resumen_de_la_tarjeta_sale_del_mismo_detalle(self):
+        """Tarjeta y aviso no pueden decir cosas distintas."""
+        self._todo_cargado()
+        self._auditar(range(1, 27))
+        self.conn.execute(
+            "UPDATE periodo_datos SET monto_adjudicado = NULL WHERE periodo = ?",
+            (PERIODO,))
+        self.conn.commit()
+        r = services.estado_modulos(self.conn, date(2026, 7, 26))
+        for modulo in ("limpieza", "los", "config"):
+            pend = r["pendientes"][modulo]
+            if pend:
+                self.assertEqual(r["motivos"][modulo],
+                                 " · ".join(p["titulo"] for p in pend), modulo)
+            else:
+                self.assertIsNone(r["motivos"][modulo], modulo)
+
+    def test_informes_remite_a_los_modulos_y_no_repite_su_detalle(self):
+        """Informes no se arregla desde Informes."""
+        self._todo_cargado()
+        self._auditar(range(1, 27))
+        self.conn.execute(
+            "UPDATE periodo_datos SET monto_adjudicado = NULL WHERE periodo = ?",
+            (PERIODO,))
+        self.conn.commit()
+        r = services.estado_modulos(self.conn, date(2026, 7, 26))
+        rutas = [i["ruta"] for p in r["pendientes"]["informes"] for i in p["items"]]
+        self.assertIn("/config", rutas)
+        self.assertIn("/los", rutas)
+        # El resumen de la tarjeta no encadena un "Faltan datos en" por módulo.
+        self.assertEqual(r["motivos"]["informes"].count("Faltan datos en"), 1)
 
     def test_los_distingue_sin_relevar_de_no_cumple(self):
         """Los dos frenan la liquidación, pero uno se resuelve cargando el dato

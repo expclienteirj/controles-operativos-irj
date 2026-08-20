@@ -966,8 +966,8 @@ const App = (() => {
     layout('Limpieza', UI.nombrePeriodo(periodo),
            '<div class="vacio">Cargando controles…</div>', { volver: '/' });
 
-    // Las dos son del mismo período y no se necesitan entre sí: van juntas.
-    const [controles, mes] = await Promise.all([
+    // Las tres son del mismo período y no se necesitan entre sí: van juntas.
+    const [controles, mes, liquidacion] = await Promise.all([
       API.get(`/api/controles?periodo=${periodo}`)
         .then((r) => Store.set('meta', `cache:controles:${periodo}`, r.controles)
           .then(() => r.controles))
@@ -977,6 +977,7 @@ const App = (() => {
         .then((r) => Store.set('meta', `cache:completitud:${periodo}`, r)
           .then(() => r))
         .catch(() => Store.get('meta', `cache:completitud:${periodo}`)),
+      API.getCacheado('/api/liquidacion', 'cache:liquidacion').catch(() => null),
     ]);
 
     // Lista de días, del más reciente al más viejo: el auditor casi siempre
@@ -1027,6 +1028,9 @@ const App = (() => {
 
     const cob = mes ? Math.round((mes.cobertura || 0) * 100) : 0;
     $('.contenido').innerHTML = `
+      ${UI.avisoPendientes(
+        liquidacion && liquidacion.pendientes && liquidacion.pendientes.limpieza,
+        (ruta) => ir(ruta))}
       ${!navigator.onLine ? `<div class="aviso advertencia">
         <strong>Sin conexión</strong>
         Podés seguir un control ya iniciado. Crear uno nuevo requiere red.
