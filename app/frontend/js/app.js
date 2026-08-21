@@ -2266,12 +2266,12 @@ const App = (() => {
               Podés seguir cargando desvíos si encontrás algo más.
             </div>`)
         : (breve
-          ? `<div class="aviso info">Sin verificar — confirmá desde la grilla.</div>`
+          ? `<div class="aviso info">Sin verificar — confirmá al terminar.</div>`
           : `<div class="aviso info">
               <strong>Sector sin verificar</strong>
-              Cargá acá los desvíos que encuentres y después volvé a la grilla
-              para confirmar el sector. Un sector sin confirmar no cuenta como
-              100%: queda sin datos.
+              Cargá acá los desvíos que encuentres y confirmá el sector cuando
+              termines de recorrerlo, con el botón de abajo. Un sector sin
+              confirmar no cuenta como 100%: queda sin datos.
             </div>`)}
 
       <h2 style="font-size:15px;margin:0 0 10px;color:var(--gris)">
@@ -2282,13 +2282,13 @@ const App = (() => {
         volver: `/control/${control.id}`,
         // Antes este botón decía "Volver y confirmar sector" y solo navegaba:
         // el auditor creía haber confirmado, volvía a la grilla y el sector
-        // seguía gris. Ahora confirma de verdad y, además, sigue a la
-        // siguiente parada de la recorrida — que es secuencial y siempre en el
-        // mismo orden. El ← de la barra inferior queda para salir sin confirmar.
+        // seguía gris. Confirma de verdad, y vuelve a la grilla — nunca salta
+        // solo al siguiente sector. El ← de la barra queda para salir sin
+        // confirmar.
         inferior: cerrado ? '' : `
           <button class="btn btn-primario" style="flex:1"
-                  id="btn-confirmar-seguir">
-            ${UI.esc(etiquetaConfirmarSeguir(sector, est))}
+                  id="btn-confirmar-volver">
+            ${UI.esc(etiquetaConfirmar(est))}
           </button>`,
       });
 
@@ -2300,41 +2300,38 @@ const App = (() => {
       };
     });
 
-    const btnSeguir = $('#btn-confirmar-seguir');
-    if (btnSeguir) btnSeguir.onclick = () => confirmarYSeguir(sector, est);
+    const btnVolver = $('#btn-confirmar-volver');
+    if (btnVolver) btnVolver.onclick = () => confirmarYVolver(sector, est);
   }
 
-  /** El siguiente sector sin confirmar del catálogo, o null si no queda. */
-  function siguienteSinConfirmar(sectorActual) {
-    const desde = sectores.findIndex((s) => s.id === sectorActual.id);
-    // Se recorre en círculo desde el actual: si el auditor salteó sectores
-    // antes, siguen apareciendo en vez de quedar fuera de la recorrida.
-    for (let i = 1; i <= sectores.length; i += 1) {
-      const s = sectores[(desde + i) % sectores.length];
-      if (s.id !== sectorActual.id && !local.confirmados[s.id]) return s;
-    }
-    return null;
+  /**
+   * Qué dice el botón del pie del sector.
+   *
+   * Siempre termina en la grilla. Antes encadenaba al siguiente sector del
+   * catálogo —"Confirmar y seguir →"— y eso decidía por el auditor: la
+   * terminal se camina en orden físico, no en el orden en que están cargados
+   * los sectores. La grilla es la parada intermedia desde la que él elige.
+   *
+   * La etiqueta dice qué se está confirmando y no solo "Confirmar sector":
+   * confirmar es una declaración explícita que queda logueada, y no es lo
+   * mismo declarar que no había nada que declarar que había tres hallazgos.
+   */
+  function etiquetaConfirmar(est) {
+    if (est.confirmado) return 'Volver a la grilla';
+    return est.desvios
+      ? `Confirmar con ${est.desvios} desvío(s) y volver`
+      : 'Confirmar sin novedades y volver';
   }
 
-  function etiquetaConfirmarSeguir(sector, est) {
-    const quedan = !!siguienteSinConfirmar(sector);
-    if (est.confirmado) return quedan ? 'Siguiente sector →' : 'Volver a la grilla';
-    const que = est.desvios
-      ? `Confirmar con ${est.desvios} desvío(s)`
-      : 'Confirmar sin novedades';
-    return quedan ? `${que} y seguir →` : `${que} y volver`;
-  }
-
-  async function confirmarYSeguir(sector, est) {
-    const siguiente = siguienteSinConfirmar(sector);
-
-    // Un sector ya confirmado no se reconfirma: solo se avanza.
+  async function confirmarYVolver(sector, est) {
+    // Un sector ya confirmado no se reconfirma: el botón solo vuelve.
     if (!est.confirmado) await confirmarSector(sector.id);
-
-    if (siguiente) return ir(`/control/${control.id}/sector/${siguiente.clave}`);
     ir(`/control/${control.id}`);
-    if (!est.confirmado) {
-      UI.toast('Último sector — falta cerrar el control', 'ok');
+
+    // Avisar recién cuando no queda ninguno: es el momento en que la recorrida
+    // dejó de tener pasos y lo único pendiente es cerrar el control.
+    if (sectores.every((s) => local.confirmados[s.id])) {
+      UI.toast('Todos los sectores confirmados — falta cerrar el control', 'ok');
     }
   }
 
