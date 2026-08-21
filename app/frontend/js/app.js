@@ -2501,11 +2501,20 @@ const App = (() => {
         }
 
         // Guardar no es abandonar: se salta la guarda de descarte.
-        UI.cerrarHoja({ forzar: true });
+        //
+        // `cerrarParaNavegar` y no `cerrarHoja`: esta última consume su entrada
+        // de historial con un history.back() que se encola, así que cerrar y
+        // navegar en el mismo tick deshace la navegación y el auditor queda
+        // donde estaba, con el botón aparentemente muerto.
+        UI.cerrarParaNavegar();
         await Store.registrarDesvioLocal(control.id, item.id,
                                          { estado, observacion: texto });
         local = await Store.estadoControl(control.id);
-        vistaSector(control.id, sector.clave);
+        // Se vuelve a la grilla de sectores, no a la lista de ítems. El auditor
+        // camina la terminal en su orden físico, no en el del catálogo: dejarlo
+        // en la grilla le devuelve la decisión de adónde va, en vez de que
+        // "Confirmar y seguir →" lo empuje al siguiente sector de la lista.
+        ir(`/control/${control.id}`);
 
         const r = await API.mutar('POST', `/api/controles/${control.id}/desvios`, {
           item_id: item.id, estado, observacion: texto, fotos,
