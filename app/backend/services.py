@@ -892,33 +892,30 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
             if sin_auditar else None))
 
     # -- Niveles de servicio ------------------------------------------------
+    #
+    # Solo cuenta lo que falta relevar. Un ítem que NO CUMPLE no traba nada: el
+    # dato está, se calculó, y dio por debajo del objetivo. Eso no es una
+    # deuda del auditor, es el resultado del mes — y es lo que la certificación
+    # existe para reflejar. Tratarlo como faltante dejaba a la app diciendo que
+    # no se puede emitir el informe justo cuando el mes está completo y el
+    # contratista incumplió, que es el mes que más hay que informar.
+    #
+    # El incumplimiento no se pierde de vista: se ve en el tablero de LoS con
+    # su color, en el porcentaje, en las no conformidades que generó y en el
+    # centro de novedades, que ya lo lista aparte.
     sin_datos: list = []
-    no_cumplen: list = []
     try:
-        dash = dashboard_los(conn, periodo)
-        sin_datos = list(dash["items_sin_datos"])
-        no_cumplen = [i for i in dash["items"] if i["estado"] == "NO_CUMPLE"]
-        falta_los = bool(sin_datos or no_cumplen)
+        sin_datos = list(dashboard_los(conn, periodo)["items_sin_datos"])
     except Exception:
-        falta_los = False
+        sin_datos = []
+    falta_los = bool(sin_datos)
     los = semaforo(falta_los)
-    # "Sin relevar" y "no cumple" van separados a propósito: los dos frenan la
-    # liquidación, pero uno se resuelve cargando el dato y el otro reclamándole
-    # al contratista. Juntarlos mandaría al auditor a cargar algo que ya está
-    # cargado.
     pend_los = []
     if sin_datos:
         pend_los.append(_pendiente(
             f"{len(sin_datos)} ítem(s) del manual sin relevar",
             "Sin el dato el ítem no cuenta como cumplido: queda en Sin datos.",
             [{"clave": i, "nombre": i, "ruta": f"/los/{i}"} for i in sin_datos]))
-    if no_cumplen:
-        pend_los.append(_pendiente(
-            f"{len(no_cumplen)} ítem(s) relevados que no cumplen",
-            "El dato está cargado y da por debajo del objetivo. No se resuelve "
-            "cargando nada: es un incumplimiento a reclamar.",
-            [{"clave": i["clave"], "nombre": i["nombre"],
-              "ruta": f"/los/{i['clave']}"} for i in no_cumplen]))
 
     # -- Datos del período que exige la certificación -----------------------
     fila = conn.execute("SELECT * FROM periodo_datos WHERE periodo = ?",

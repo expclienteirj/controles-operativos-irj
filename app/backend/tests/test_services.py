@@ -1606,15 +1606,42 @@ class TestEstadoModulos(Base):
         # El resumen de la tarjeta no encadena un "Faltan datos en" por módulo.
         self.assertEqual(r["motivos"]["informes"].count("Faltan datos en"), 1)
 
-    def test_los_distingue_sin_relevar_de_no_cumple(self):
-        """Los dos frenan la liquidación, pero uno se resuelve cargando el dato
-        y el otro reclamándole al contratista."""
+    def test_los_solo_se_pone_en_rojo_por_lo_que_falta_relevar(self):
         self._todo_cargado()
         self._auditar(range(1, 27))
         r = services.estado_modulos(self.conn, date(2026, 7, 26))
         self.assertEqual(r["los"], services.ESTADO_FALTANTE)
         self.assertIn("sin relevar", r["motivos"]["los"])
-        self.assertNotIn("no cumplen", r["motivos"]["los"])
+
+    def test_un_item_que_no_cumple_no_traba_la_liquidacion(self):
+        """No cumplir no es una deuda del auditor: el dato está, se calculó y
+        dio por debajo del objetivo. Es el resultado del mes, y es justo lo que
+        la certificación existe para reflejar.
+
+        Tratarlo como faltante dejaba a la app diciendo que no se podía emitir
+        el informe cuando el mes estaba completo y el contratista había
+        incumplido — el mes que más hay que informar.
+        """
+        self._todo_cargado()
+        self._auditar(range(1, 27))
+
+        # Un tablero sin nada por relevar y con un ítem que no cumple.
+        real = services.dashboard_los
+        services.dashboard_los = lambda conn, periodo: {
+            "items_sin_datos": [],
+            "items": [{"clave": "banos", "nombre": "Baños",
+                       "estado": "NO_CUMPLE"}],
+        }
+        try:
+            r = services.estado_modulos(self.conn, date(2026, 7, 26))
+        finally:
+            services.dashboard_los = real
+
+        self.assertEqual(r["los"], services.ESTADO_AL_DIA)
+        self.assertIsNone(r["motivos"]["los"])
+        self.assertEqual(r["pendientes"]["los"], [])
+        # Y no puede arrastrar a Informes, que es donde se emite el PDF.
+        self.assertEqual(r["informes"], services.ESTADO_AL_DIA)
 
     def test_el_semaforo_no_depende_del_rol(self):
         """Hay datos que solo carga el admin, pero el auditor tiene que ver que
