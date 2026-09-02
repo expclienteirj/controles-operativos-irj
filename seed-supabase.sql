@@ -49,7 +49,6 @@ INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('penalizacio
 INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('periodicidad_control', '"DIARIA"', 'general', 'El control de limpieza es diario: se exige uno por cada día del mes.', '1') ON CONFLICT DO NOTHING;
 INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('pesos', '{"documentacion": 0.1, "ley_19587": 0.1, "programacion_trabajos": 0.4, "maquinarias": 0.1, "insumos": 0.1, "calidad_servicio": 0.2}', 'certificacion', '2.3 — Ponderaciones de los 6 ítems (PCP 4.3). Editables de común acuerdo', '1') ON CONFLICT DO NOTHING;
 INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('tomas_por_100_pax', '25', 'los', '3.6 — Tomas exigidas cada 100 pasajeros en hora pico, por puerta', '1') ON CONFLICT DO NOTHING;
-INSERT INTO config (clave,valor,grupo,descripcion,editable) VALUES ('veredas_umbrales', '{"grieta_separacion_d_cm": 1.0, "superficie_b_max_cm2": 40, "superficie_b_max_diametro_cm": 15, "superficie_b_max_profundidad_cm": 2, "escalonamiento_c_min_cm": 0.5, "escalonamiento_c_max_cm": 1.0, "superficie_d_min_cm2": 10000, "superficie_d_min_profundidad_cm": 4}', 'los', '3.4 — Umbrales cuantitativos de veredas y vialidades', '1') ON CONFLICT DO NOTHING;
 
 -- sectores_limpieza: 9 fila(s)
 INSERT INTO sectores_limpieza (id,clave,nombre,orden,activo) VALUES ('1', 'sala_embarque', 'Sala de embarque', '1', '1') ON CONFLICT DO NOTHING;

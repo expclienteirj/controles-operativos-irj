@@ -114,13 +114,6 @@ CONFIG = [
         "veredas_vialidades": ["grietas", "superficies_danadas"],
         "paredes_pintura": ["estado_general"],
      }, "3.4 — Sub-ítems y criterios de infraestructura"),
-    ("los", "veredas_umbrales", {
-        "grieta_separacion_d_cm": 1.0,
-        "superficie_b_max_cm2": 40, "superficie_b_max_diametro_cm": 15,
-        "superficie_b_max_profundidad_cm": 2,
-        "escalonamiento_c_min_cm": 0.5, "escalonamiento_c_max_cm": 1.0,
-        "superficie_d_min_cm2": 10000, "superficie_d_min_profundidad_cm": 4,
-     }, "3.4 — Umbrales cuantitativos de veredas y vialidades"),
 
     # -- LoS 3.5 asientos ---------------------------------------------------
     ("los", "asientos_minimo", calc.ASIENTOS_MINIMOS_IRJ,
