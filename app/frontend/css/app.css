@@ -164,7 +164,7 @@ button, .tocable { touch-action: manipulation; user-select: none; }
 }
 .sector-abrir:active { opacity: .7; }
 
-/* Atajo "TODO OK": confirma el sector sin entrar.
+/* Atajo «Sin novedades»: confirma el sector sin entrar.
    Antes era un botón macizo verde, más grande y más contrastado que el
    nombre del sector: la tarjeta invitaba a confirmar en masa antes que a leer
    el estado. Ahora es un botón secundario (contorno, sin relleno) — sigue
@@ -543,7 +543,7 @@ span.dia:active { transform: none; }
   display: block; font-size: 13px; color: var(--gris); margin-top: 2px;
 }
 
-/* Acción secundaria dentro de una lista: no puede competir con "TODO OK",
+/* Acción secundaria dentro de una lista: no puede competir con «Sin OK",
    que es la acción principal de la pantalla. */
 .btn-texto {
   flex: none; min-height: var(--tap); padding: 0 14px;

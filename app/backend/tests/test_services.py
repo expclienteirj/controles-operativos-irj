@@ -746,7 +746,7 @@ class TestCertificacion(Base):
         aviso = next(a for a in r["advertencias"]
                      if a["codigo"] == "PENALIZACION_NC_NO_CONFIRMADA")
         self.assertEqual(aviso["nivel"], "ADVERTENCIA")
-        self.assertIn("1 NC abierta", aviso["mensaje"])
+        self.assertIn("1 no conformidad abierta", aviso["mensaje"])
 
     def test_la_advertencia_desaparece_al_confirmar_el_criterio(self):
         self._mes_completo()
@@ -1771,7 +1771,7 @@ class TestNovedades(Base):
         r = services.novedades(self.conn, date(2026, 7, 12))
         nov = next(n for n in r["novedades"] if n["clave"] == "maquinaria_baja")
         self.assertEqual(nov["criticidad"], services.CRITICIDAD_ALTA)
-        self.assertIn("7 día(s)", nov["detalle"])
+        self.assertIn("7 días", nov["detalle"])
 
     def test_una_maquina_ya_repuesta_deja_de_avisar(self):
         equipo = self.conn.execute(

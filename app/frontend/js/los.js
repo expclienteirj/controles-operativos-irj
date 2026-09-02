@@ -153,7 +153,7 @@ const LoS = (() => {
 
       ${dash.requieren_configuracion.length ? `
         <div class="aviso advertencia">
-          <strong>${dash.requieren_configuracion.length} ítem(s) sin inventario cargado</strong>
+          <strong>${UI.plural(dash.requieren_configuracion.length, 'ítem')} sin inventario cargado</strong>
           No se pueden relevar y quedan como Sin datos — nunca como 100%.
           Se cargan desde Configuración → Inventario.
         </div>` : ''}
@@ -168,11 +168,11 @@ const LoS = (() => {
         <h2>Cumplimiento del período</h2>
         <p style="margin:0 0 6px;font-size:32px;font-weight:700">${pct}</p>
         <p style="margin:0;font-size:14px;color:var(--gris)">
-          ${dash.items_cumplen} de ${dash.items_evaluados} ítem(s) evaluado(s)
+          ${dash.items_cumplen} de ${UI.plural(dash.items_evaluados, 'ítem')} evaluado${dash.items_evaluados === 1 ? '' : 's'}
           cumplen${dash.items_sin_datos.length
             ? ` · ${dash.items_sin_datos.length} todavía sin datos` : ''}.
           Se calcula solo sobre lo relevado${noAplican.length
-            ? `; ${noAplican.length} ítem(s) no aplican en IRJ` : ''}.
+            ? `; ${UI.plural(noAplican.length, 'ítem')} no aplica${noAplican.length === 1 ? '' : 'n'} en IRJ` : ''}.
         </p>
       </div>`,
       { volver: '/' });
@@ -248,8 +248,8 @@ const LoS = (() => {
       <div class="tarjeta">
         <h2>Avance del mes — recorrida diaria</h2>
         <p style="margin:0;font-size:14px;color:var(--gris)">
-          ${completos} día(s) con los ${total} ítems relevados${
-            conAlgo > completos ? ` · ${conAlgo - completos} incompleto(s)` : ''}.
+          ${UI.plural(completos, 'día')} con los ${total} ítems relevados${
+            conAlgo > completos ? ` · ${UI.plural(conAlgo - completos, 'incompleto')}` : ''}.
           El color indica cuánto se relevó; el punto rojo, que algún ítem no cumple.
         </p>
         <div id="cal-los">${UI.calendarioMes(periodo, {
@@ -346,8 +346,8 @@ const LoS = (() => {
                                                         : 'Hoy: sin novedades')
                       : 'Hoy: pendiente';
       const mes = d.dias_incumplen && d.dias_incumplen.length
-        ? `${d.dias_relevados.length} día(s) en el mes · falla ${d.dias_incumplen.length}`
-        : `${(d.dias_relevados || []).length} día(s) relevado(s) en el mes`;
+        ? `${UI.plural(d.dias_relevados.length, 'día')} en el mes · falla ${d.dias_incumplen.length}`
+        : `${UI.plural((d.dias_relevados || []).length, 'día')} relevado${(d.dias_relevados || []).length === 1 ? '' : 's'} en el mes`;
 
       return `<div class="fila-dia ${bloqueado ? 'bloqueado'
                                     : hecho ? (d.cumple_hoy === false ? 'total' : '')
@@ -361,7 +361,7 @@ const LoS = (() => {
         </button>
         ${cerrado || bloqueado || hecho ? '' : `
           <button class="btn-sector-ok" data-hoy-ok="${UI.esc(i.clave)}">
-            SIN NOVEDADES</button>`}
+            Sin novedades</button>`}
       </div>`;
     };
 
@@ -532,8 +532,8 @@ const LoS = (() => {
           <div class="item-pendiente">
             <div class="texto">
               <span class="nombre-item">${UI.esc(i.nombre)}</span>
-              <span class="obs">${(i.diario && i.diario.dias_relevados.length) || 0}
-                día(s) relevado(s)</span>
+              <span class="obs">${UI.plural((i.diario && i.diario.dias_relevados.length) || 0,
+                'día')} relevado${((i.diario && i.diario.dias_relevados.length) || 0) === 1 ? '' : 's'}</span>
             </div>
             <button class="btn-texto" data-dias="${UI.esc(i.clave)}">Ver días</button>
           </div>`).join('')}
@@ -566,7 +566,7 @@ const LoS = (() => {
     const origen = i.clave === 'banos'
       ? `La limpieza sale de los ítems de baños del check-list diario,
          promediados sobre los días auditados del mes. Los artefactos en
-         servicio salen de las clausuras cargadas en el control diario.`
+         servicio salen de las clausuras cargadas en la recorrida diaria.`
       : `Se calcula con los ítems del check-list diario que miden cestos,
          contenedores, vidrios, techos y corredores.`;
 
@@ -583,7 +583,7 @@ const LoS = (() => {
           <strong>Artefactos fuera de servicio (3.1.a)</strong>
           Un inodoro clausurado el check-list lo mide como limpio igual, así
           que se registra aparte — en la tarjeta "Artefactos de baño" del
-          control diario, junto al resto de la recorrida.
+          recorrida diaria, junto al resto del relevamiento.
         </div>` : ''}
       <div class="acciones">
         <button class="btn" data-cerrar>Entendido</button>
@@ -697,7 +697,7 @@ const LoS = (() => {
                   </button>
                   ${hecho ? '' : `<button class="btn-sector-ok"
                                           data-sin-novedad="${fecha}">
-                                    SIN NOVEDADES</button>`}
+                                    Sin novedades</button>`}
                 </div>`;
       }).join('');
 
@@ -729,9 +729,9 @@ const LoS = (() => {
       <div class="tarjeta">
         <h2>Avance del mes</h2>
         <p style="margin:0 0 4px;font-size:14px;color:var(--gris)">
-          ${diario.dias_relevados.length} día(s) relevado(s)${
+          ${UI.plural(diario.dias_relevados.length, 'día')} relevado${diario.dias_relevados.length === 1 ? '' : 's'}${
             diario.dias_incumplen.length
-              ? ` · ${diario.dias_incumplen.length} no cumple(n)` : ''}
+              ? ` · ${diario.dias_incumplen.length} no cumple${diario.dias_incumplen.length === 1 ? '' : 'n'}` : ''}
         </p>
         <div id="cal-item-los">${calendario}</div>
       </div>

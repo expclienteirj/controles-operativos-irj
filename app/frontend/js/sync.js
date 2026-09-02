@@ -100,9 +100,9 @@ const Sync = (() => {
 
       if (!silencioso || fallidas) {
         if (fallidas) {
-          UI.toast(`${ok} operación(es) sincronizada(s), ${fallidas} con error`, 'error');
+          UI.toast(`${UI.plural(ok, 'operación')} sincronizada${ok === 1 ? '' : 's'}, ${fallidas} con error`, 'error');
         } else if (ok) {
-          UI.toast(`${ok} operación(es) sincronizada(s)`, 'ok');
+          UI.toast(`${UI.plural(ok, 'operación')} sincronizada${ok === 1 ? '' : 's'}`, 'ok');
         }
       }
     } catch (e) {

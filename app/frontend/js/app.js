@@ -63,7 +63,7 @@ const App = (() => {
         </div>
         <p style="color:var(--gris);font-size:14px">
           La app necesita guardar los relevamientos en el dispositivo para poder
-          trabajar sin conexión. Hasta resolverlo no conviene cargar un control:
+          trabajar sin conexión. Hasta resolverlo no conviene cargar una recorrida:
           los datos podrían perderse.
         </p>
         <button class="btn btn-primario btn-bloque btn-grande" id="reintentar">
@@ -270,7 +270,8 @@ const App = (() => {
     btn.classList.toggle('critico', _novedades.criticas > 0);
     btn.querySelector('.cuenta').textContent = _novedades.total;
     btn.setAttribute('aria-label',
-      `${_novedades.total} novedad(es), ${_novedades.criticas} crítica(s)`);
+      `${UI.plural(_novedades.total, 'novedad')}, `
+      + `${UI.plural(_novedades.criticas, 'crítica')}`);
   }
 
   /**
@@ -307,7 +308,7 @@ const App = (() => {
 
     UI.abrirHoja(`
       <h3>Novedades</h3>
-      <p class="sub">${n.total} en total${n.criticas ? ` · ${n.criticas} crítica(s)`
+      <p class="sub">${n.total} en total${n.criticas ? ` · ${UI.plural(n.criticas, 'crítica')}`
                                                     : ''}</p>
       <div class="lista-pendientes">${n.novedades.map(fila).join('')}</div>
       <div class="acciones">
@@ -363,7 +364,7 @@ const App = (() => {
           <span class="nombre-item">${UI.esc(b.equipo)}</span>
           <span class="obs">${b.id ? `De baja desde ${UI.esc(b.desde)}`
                                    : `Marcada el ${UI.esc(b.desde)} — se repone `
-                                     + 'desde el control del día'}</span>
+                                     + 'desde la recorrida del día'}</span>
         </div>
         ${b.id ? `<button class="btn-texto" data-alta="${i}">Dar de alta</button>`
                : ''}
@@ -447,7 +448,7 @@ const App = (() => {
     UI.abrirHoja(`
       <h3>Estado de sincronización</h3>
       <p class="sub">${est.online ? 'Conectado' : 'Sin conexión'} ·
-        ${est.pendientes} operación(es) pendiente(s)</p>
+        ${UI.plural(est.pendientes, 'operación')} pendiente${est.pendientes === 1 ? '' : 's'}</p>
       ${est.pendientes === 0
         ? '<div class="aviso info">Todo sincronizado con el servidor.</div>'
         : `<div class="aviso ${est.online ? 'info' : 'advertencia'}">
@@ -456,7 +457,7 @@ const App = (() => {
            </div>`}
       ${conError.length ? `
         <div class="aviso error">
-          <strong>${conError.length} operación(es) rechazada(s)</strong>
+          <strong>${UI.plural(conError.length, 'operación')} rechazada${conError.length === 1 ? '' : 's'}</strong>
           ${UI.esc(conError[0].error || '')}
         </div>` : ''}
       <div class="acciones">
@@ -482,7 +483,7 @@ const App = (() => {
         const pend = (await Sync.estado()).pendientes;
         const ok = await UI.confirmar(
           'Cerrar sesión',
-          pend ? `Hay ${pend} operación(es) sin sincronizar. Si cerrás sesión ahora `
+          pend ? `Hay ${UI.plural(pend, 'operación')} sin sincronizar. Si cerrás sesión ahora `
                + 'se pierden. Conviene sincronizar primero.'
                : 'Se borrarán los datos locales de esta tablet.',
           'Cerrar sesión', 'btn-rojo');
@@ -622,7 +623,7 @@ const App = (() => {
 
     if (!hoy) {
       return $('.contenido').innerHTML =
-        '<div class="aviso error">No se pudo cargar el control del día.</div>';
+        '<div class="aviso error">No se pudo cargar la recorrida del día.</div>';
     }
 
     $('.contenido').innerHTML = `
@@ -655,7 +656,7 @@ const App = (() => {
             <span class="nombre">Configuración del Aeropuerto</span>
             ${detalleModulo(hoy.modulos, 'config',
               onboarding && !onboarding.terminado
-                ? `Falta cargar ${onboarding.total - onboarding.completos} bloque(s) de inventario`
+                ? `Falta cargar ${UI.plural(onboarding.total - onboarding.completos, 'bloque')} de inventario`
                 : 'Inventario, parámetros y datos del período')}
           </button>` : ''}
       </div>`;
@@ -700,9 +701,9 @@ const App = (() => {
 
     UI.abrirHoja(`
       <h3>Días con una sola recorrida</h3>
-      <p class="sub">${UI.esc(UI.nombrePeriodo(periodo))} — ${dias.length} día(s)</p>
+      <p class="sub">${UI.esc(UI.nombrePeriodo(periodo))} — ${UI.plural(dias.length, 'día')}</p>
       <div class="aviso info">
-        Se exigen dos controles diarios. El turno que no se hizo no baja el
+        Se exigen dos recorridas diarias. El turno que no se hizo no baja el
         porcentaje —no hay recorrida de la cual afirmar nada—, pero queda como
         incumplimiento del plan de auditoría.
       </div>
@@ -794,7 +795,7 @@ const App = (() => {
     const sugerido = turnoSugerido(hoy.turnos);
     return `
       <div class="tarjeta">
-        <h2>Controles de hoy</h2>
+        <h2>Recorridas de hoy</h2>
         <p style="margin:0 0 12px;color:var(--gris)">${UI.esc(dia)} —
           se exigen las dos recorridas diarias</p>
         ${hoy.turnos.map((t) => tarjetaTurno(t, t.turno === sugerido)).join('')}
@@ -922,7 +923,7 @@ const App = (() => {
     const avisoTurnos = t.dias_parciales && t.dias_parciales.length
       ? `<div class="aviso advertencia">
            <div class="linea-aviso">
-             <strong>${t.dias_parciales.length} día(s) con una sola recorrida</strong>
+             <strong>${UI.plural(t.dias_parciales.length, 'día')} con una sola recorrida</strong>
              <button class="btn" id="ver-parciales">Ver</button>
            </div>
          </div>`
@@ -932,7 +933,7 @@ const App = (() => {
     const aviso = mes.completo
       ? `<div class="aviso info"><strong>Mes completo</strong>
            Los ${mes.dias_esperados} días de ${UI.esc(UI.nombrePeriodo(periodo))}
-           tienen control cerrado.</div>`
+           tienen su recorrida cerrada.</div>`
       : !mes.cobertura_suficiente
         ? `<div class="aviso advertencia">
              <strong>Cobertura ${cob}% — ${mes.dias_cerrados.length} de
@@ -945,7 +946,7 @@ const App = (() => {
         : `<div class="aviso info">
              <strong>${mes.dias_cerrados.length} de ${mes.dias_esperados} días
              auditados (${cob}%)</strong>
-             ${mes.dias_vencidos_sin_control.length} día(s) quedaron sin control.
+             ${UI.plural(mes.dias_vencidos_sin_control.length, 'día')} quedaron sin recorrida.
              No computan ni penalizan.
            </div>`;
 
@@ -964,7 +965,7 @@ const App = (() => {
   async function vistaLimpieza() {
     const periodo = UI.periodoActual();
     layout('Limpieza', UI.nombrePeriodo(periodo),
-           '<div class="vacio">Cargando controles…</div>', { volver: '/' });
+           '<div class="vacio">Cargando recorridas…</div>', { volver: '/' });
 
     // Las tres son del mismo período y no se necesitan entre sí: van juntas.
     const [controles, mes, liquidacion] = await Promise.all([
@@ -1033,18 +1034,18 @@ const App = (() => {
         (ruta) => ir(ruta))}
       ${!navigator.onLine ? `<div class="aviso advertencia">
         <strong>Sin conexión</strong>
-        Podés seguir un control ya iniciado. Crear uno nuevo requiere red.
+        Podés seguir una recorrida ya iniciada. Crear una nueva requiere red.
       </div>` : ''}
       ${mes ? (mes.completo
         ? `<div class="aviso info"><strong>Mes completo</strong>
-             Los ${mes.dias_esperados} días tienen control cerrado.</div>`
+             Los ${mes.dias_esperados} días tienen su recorrida cerrada.</div>`
         : `<div class="aviso ${mes.cobertura_suficiente ? 'info' : 'advertencia'}">
              <strong>${mes.dias_cerrados.length} de ${mes.dias_esperados} días
              auditados (${cob}%)</strong>
-             ${mes.dias_vencidos_sin_control.length} día(s) sin control.
+             ${UI.plural(mes.dias_vencidos_sin_control.length, 'día')} sin recorrida.
              No penalizan al contratista, pero bajan la representatividad del mes.
            </div>`) : ''}
-      <h2 style="font-size:16px;margin:0 0 12px">Controles diarios</h2>
+      <h2 style="font-size:16px;margin:0 0 12px">Recorridas del mes</h2>
       <div class="lista-items">${filas}</div>
       ${usuario.rol === 'admin' ? `
         <button class="btn btn-bloque" id="btn-certificacion" style="margin-top:16px">
@@ -1064,7 +1065,7 @@ const App = (() => {
 
   async function crearControl(fecha, turno = 'MANANA') {
     if (!navigator.onLine) {
-      return UI.toast('Se necesita conexión para iniciar un control nuevo', 'error');
+      return UI.toast('Se necesita conexión para iniciar una recorrida nueva', 'error');
     }
     // Ya no existe el caso "control atrasado": el servidor solo abre el de hoy,
     // así que el diálogo que avisaba "estás cargando un día anterior" describía
@@ -1141,7 +1142,7 @@ const App = (() => {
       </div>
       ${resto.length ? `
         <details class="detalle-avisos">
-          <summary>Ver ${resto.length} aviso(s) más</summary>
+          <summary>Ver ${UI.plural(resto.length, 'aviso')} más</summary>
           ${resto.map((a) => `
             <div class="aviso ${clasificarAviso(a.nivel)}">
               ${UI.esc(a.mensaje)}
@@ -1150,7 +1151,7 @@ const App = (() => {
 
     UI.abrirHoja(`
       <h3>Certificación · ${UI.esc(UI.nombrePeriodo(periodo))}</h3>
-      <p class="sub">Calculada por el servidor sobre los controles cerrados</p>
+      <p class="sub">Calculada por el servidor sobre las recorridas cerradas</p>
 
       <div class="tarjeta" style="text-align:center;margin-bottom:16px">
         <div style="font-size:38px;font-weight:700;line-height:1.1">
@@ -1215,13 +1216,13 @@ const App = (() => {
   }
 
   function errorControlNoCargado() {
-    layout('Control', '', `<div class="aviso error">
-      No se pudo cargar el control y no hay copia local.</div>`,
+    layout('Recorrida', '', `<div class="aviso error">
+      No se pudo cargar la recorrida y no hay copia local.</div>`,
       { volver: '/limpieza' });
   }
 
   async function vistaControl(controlId) {
-    layout('Control', 'Cargando…', '<div class="vacio">Cargando…</div>',
+    layout('Recorrida', 'Cargando…', '<div class="vacio">Cargando…</div>',
            { volver: '/limpieza' });
 
     if (!await cargarControl(controlId)) return errorControlNoCargado();
@@ -1255,20 +1256,20 @@ const App = (() => {
     // distinto de uno intacto: es trabajo empezado que falta cerrar.
     const detalle = !confirmado
       ? (desvios
-          ? `${desvios} desvío(s) · falta confirmar`
+          ? `${UI.plural(desvios, 'desvío')} · falta confirmar`
           : `${sector.items.length} ítems · sin verificar`)
       : desvios
-        ? `${desvios} desvío(s) · ${Calc.porcentaje(porcentaje)}`
+        ? `${UI.plural(desvios, 'desvío')} · ${Calc.porcentaje(porcentaje)}`
         : 'Sin novedades · 100%';
     // Atajo de un toque para el caso frecuente: el sector está bien.
     // Solo aparece si el sector no tiene desvíos cargados; con desvíos el
-    // botón diría "TODO OK" sobre un sector que justamente no lo está, así
+    // botón diría «Sin novedades» sobre un sector que justamente no lo está, así
     // que ahí se ofrece "Confirmar" (confirma el sector con sus desvíos).
     const accion = cerrado || confirmado ? ''
       : desvios
         ? `<button class="btn-sector-ok con-desvios"
                    data-confirmar="${sector.id}">Confirmar</button>`
-        : `<button class="btn-sector-ok" data-ok="${sector.id}">TODO OK</button>`;
+        : `<button class="btn-sector-ok" data-ok="${sector.id}">Sin novedades</button>`;
 
     return `<div class="sector ${clase}" data-sector-id="${sector.id}">
               <button class="sector-abrir" data-sector="${UI.esc(sector.clave)}">
@@ -1302,7 +1303,7 @@ const App = (() => {
         <span style="color:var(--gris)">preview · calcula el servidor</span>
       </div>
       <button class="btn btn-verde" id="btn-cerrar" ${pendientes ? 'disabled' : ''}>
-        ${pendientes ? `Faltan ${pendientes} sector(es)` : 'Cerrar control'}
+        ${pendientes ? `Faltan ${UI.plural(pendientes, 'sector')}` : 'Cerrar recorrida'}
       </button>`;
   }
 
@@ -1368,13 +1369,13 @@ const App = (() => {
 
     // El turno va en el subtítulo: con dos recorridas idénticas por día, la
     // fecha sola no alcanza para saber en cuál se está cargando.
-    layout(NOMBRE_TURNO[control.turno] || 'Control diario',
+    layout(NOMBRE_TURNO[control.turno] || 'Recorrida diaria',
            UI.fechaLarga(control.fecha), `
       ${cerrado ? `<div class="aviso info">
-        <strong>Control cerrado</strong>
+        <strong>Recorrida cerrada</strong>
         Cerrado el ${UI.esc(UI.fecha(control.cerrado_en))}. No admite cambios.
         ${usuario.rol === 'admin'
-          ? '<button class="btn" id="btn-reabrir" style="margin-top:10px">Reabrir control</button>'
+          ? '<button class="btn" id="btn-reabrir" style="margin-top:10px">Reabrir recorrida</button>'
           : ''}
       </div>` : ''}
       <div class="tarjeta" id="tarjeta-avance">
@@ -1458,8 +1459,8 @@ const App = (() => {
     caja.innerHTML = `
       <div class="linea-aviso">
         <div>
-          <strong>${pendientes.length} pendiente(s) de auditorías anteriores</strong>
-          <span class="detalle-aviso">La más antigua lleva ${dias} día(s) —
+          <strong>${UI.plural(pendientes.length, 'pendiente')} de auditorías anteriores</strong>
+          <span class="detalle-aviso">La más antigua lleva ${UI.plural(dias, 'día')} —
             ${UI.esc([vieja.sector, vieja.item].filter(Boolean).join(' · '))}</span>
         </div>
         <button class="btn" id="ver-pendientes">Ver</button>
@@ -1488,7 +1489,7 @@ const App = (() => {
 
     UI.abrirHoja(`
       <h3>Pendiente de auditorías anteriores</h3>
-      <p class="sub">${pendientes.length} no conformidad(es) sin resolver —
+      <p class="sub">${UI.plural(pendientes.length, 'no conformidad', 'no conformidades')} sin resolver —
         de la más antigua a la más reciente</p>
       <div class="aviso info">
         Verificalas durante la recorrida. Cerrarlas no modifica el porcentaje
@@ -1620,7 +1621,7 @@ const App = (() => {
 
     caja.querySelectorAll('[data-nucleo]').forEach((b) => {
       b.onclick = () => {
-        if (cerrado) return UI.toast('El control está cerrado', 'error');
+        if (cerrado) return UI.toast('La recorrida está cerrada', 'error');
         const n = datos.nucleos.find((x) => x.id === parseInt(b.dataset.nucleo, 10));
         hojaClausurarArtefacto(n, datos.fecha, cerrado);
       };
@@ -1638,7 +1639,7 @@ const App = (() => {
   function hojaClausurarArtefacto(n, fechaControl, cerrado) {
     const opciones = n.equipos.map((e) =>
       `<option value="${e.equipo}">${UI.esc(etiquetaArtefacto(e.equipo))} —
-        ${e.instalados} instalado(s)</option>`).join('');
+        ${UI.plural(e.instalados, 'instalado')}</option>`).join('');
 
     UI.abrirHoja(`
       <h3>${UI.esc(n.nombre)}</h3>
@@ -1717,7 +1718,7 @@ const App = (() => {
 
     UI.abrirHoja(`
       <h3>Clausuras del mes</h3>
-      <p class="sub">${bajas.length} registrada(s)</p>
+      <p class="sub">${UI.plural(bajas.length, 'registrada')}</p>
       <div class="lista-pendientes">${filas}</div>
       <div class="acciones">
         <button class="btn" data-cerrar>Cerrar</button>
@@ -1803,7 +1804,7 @@ const App = (() => {
       if (!datos) {
         caja.innerHTML = `<h2>Maquinarias y equipos</h2>
           <p style="margin:0;font-size:14px;color:var(--gris)">
-            No se pudo cargar. Se puede seguir con el resto del control.</p>`;
+            No se pudo cargar. Se puede seguir con el resto de la recorrida.</p>`;
         return;
       }
     }
@@ -1826,7 +1827,7 @@ const App = (() => {
       </p>
       <p style="margin:0 0 8px;font-size:14px;color:var(--gris)">
         Disponibilidad del mes: <strong>${disp === null ? 'Sin datos' : disp + '%'}</strong>
-        ${m.dias_considerados ? ` · ${m.dias_considerados} día(s) medidos` : ''}
+        ${m.dias_considerados ? ` · ${UI.plural(m.dias_considerados, 'día')} medidos` : ''}
         — incide en el ítem 4 de la certificación
       </p>
       <button class="btn" id="ver-bajas" style="margin-bottom:12px">
@@ -1858,7 +1859,7 @@ const App = (() => {
 
     caja.querySelectorAll('[data-equipo]').forEach((b) => {
       b.onclick = () => {
-        if (cerrado) return UI.toast('El control está cerrado', 'error');
+        if (cerrado) return UI.toast('La recorrida está cerrada', 'error');
         const equipo = datos.equipos.find(
           (e) => e.id === parseInt(b.dataset.equipo, 10));
         equipo.baja ? hojaReponerEquipo(equipo, cerrado)
@@ -1955,7 +1956,7 @@ const App = (() => {
     UI.abrirHoja(`
       <h3>Bajas de maquinaria</h3>
       <p class="sub">${UI.esc(UI.nombrePeriodo(control.periodo))} —
-        ${datos.bajas.length} registrada(s)</p>
+        ${UI.plural(datos.bajas.length, 'registrada')}</p>
       ${datos.bajas.length ? `
         <div class="aviso advertencia">
           Estos días descuentan del ítem 4 de la certificación. Corregir una
@@ -2147,19 +2148,19 @@ const App = (() => {
 
   async function cerrarControl() {
     const ok = await UI.confirmar(
-      'Cerrar control',
+      'Cerrar recorrida',
       'Una vez cerrado no se puede editar (solo un administrador puede reabrirlo). '
       + 'Verificá que todos los sectores estén bien cargados.',
-      'Cerrar control', 'btn-verde');
+      'Cerrar recorrida', 'btn-verde');
     if (!ok) return;
 
     if (!navigator.onLine) {
-      return UI.toast('El cierre del control requiere conexión', 'error');
+      return UI.toast('Cerrar la recorrida requiere conexión', 'error');
     }
     try {
       await Sync.sincronizar({ silencioso: false });   // primero, lo pendiente
       await API.post(`/api/controles/${control.id}/cerrar`);
-      UI.toast('Control cerrado', 'ok');
+      UI.toast('Recorrida cerrada', 'ok');
       ir('/limpieza');
     } catch (e) {
       UI.toast(e.message, 'error');
@@ -2177,14 +2178,14 @@ const App = (() => {
    */
   async function reabrirControl() {
     if (!navigator.onLine) {
-      return UI.toast('Reabrir un control requiere conexión', 'error');
+      return UI.toast('Reabrir una recorrida requiere conexión', 'error');
     }
     UI.abrirHoja(`
-      <h3>Reabrir control</h3>
-      <p class="sub">${UI.esc(NOMBRE_TURNO[control.turno] || 'Control')} del
+      <h3>Reabrir recorrida</h3>
+      <p class="sub">${UI.esc(NOMBRE_TURNO[control.turno] || 'Recorrida')} del
         ${UI.esc(UI.fechaLarga(control.fecha))}</p>
       <div class="aviso advertencia">
-        El control vuelve a admitir cambios y su resultado puede variar. Queda
+        La recorrida vuelve a admitir cambios y su resultado puede variar. Queda
         registrado quién lo reabrió, cuándo y por qué.
       </div>
       <div class="campo">
@@ -2206,7 +2207,7 @@ const App = (() => {
           return UI.toast(e.message, 'error', 6000);
         }
         cerrar();
-        UI.toast('Control reabierto', 'ok');
+        UI.toast('Recorrida reabierta', 'ok');
         vistaControl(control.id);
       };
     });
@@ -2255,12 +2256,12 @@ const App = (() => {
       ${est.confirmado
         ? (breve
           ? `<div class="aviso ${est.desvios ? 'advertencia' : 'info'}">
-              ${est.desvios ? `${est.desvios} desvío(s)` : 'Sin novedades'} ·
+              ${est.desvios ? UI.plural(est.desvios, 'desvío') : 'Sin novedades'} ·
               ${Calc.porcentaje(est.porcentaje)}
             </div>`
           : `<div class="aviso ${est.desvios ? 'advertencia' : 'info'}">
               <strong>${est.desvios
-                ? `Sector confirmado con ${est.desvios} desvío(s)`
+                ? `Sector confirmado con ${UI.plural(est.desvios, 'desvío')}`
                 : 'Sector confirmado sin novedades'}</strong>
               ${Calc.porcentaje(est.porcentaje)} de cumplimiento.
               Podés seguir cargando desvíos si encontrás algo más.
@@ -2294,7 +2295,7 @@ const App = (() => {
 
     document.querySelectorAll('[data-item]').forEach((b) => {
       b.onclick = () => {
-        if (cerrado) return UI.toast('El control está cerrado', 'error');
+        if (cerrado) return UI.toast('La recorrida está cerrada', 'error');
         const item = sector.items.find((i) => i.id === parseInt(b.dataset.item, 10));
         hojaDesvio(sector, item);
       };
@@ -2319,7 +2320,7 @@ const App = (() => {
   function etiquetaConfirmar(est) {
     if (est.confirmado) return 'Volver a la grilla';
     return est.desvios
-      ? `Confirmar con ${est.desvios} desvío(s) y volver`
+      ? `Confirmar con ${UI.plural(est.desvios, 'desvío')} y volver`
       : 'Confirmar sin novedades y volver';
   }
 
@@ -2331,7 +2332,7 @@ const App = (() => {
     // Avisar recién cuando no queda ninguno: es el momento en que la recorrida
     // dejó de tener pasos y lo único pendiente es cerrar el control.
     if (sectores.every((s) => local.confirmados[s.id])) {
-      UI.toast('Todos los sectores confirmados — falta cerrar el control', 'ok');
+      UI.toast('Todos los sectores confirmados — falta cerrar la recorrida', 'ok');
     }
   }
 
@@ -2366,7 +2367,7 @@ const App = (() => {
       return UI.confirmar(
         'Descartar el desvío',
         'Se pierde lo cargado en esta hoja'
-        + (fotos.length ? `, incluidas ${fotos.length} foto(s)` : '') + '.',
+        + (fotos.length ? `, incluidas ${UI.plural(fotos.length, 'foto')}` : '') + '.',
         'Descartar', 'btn-rojo');
     };
 
@@ -2400,8 +2401,8 @@ const App = (() => {
 
       <div class="campo" id="campo-fotos">
         <label>Evidencia fotográfica</label>
-        ${guardadas.length ? `<span class="ayuda">${guardadas.length} ya
-          cargada(s) — tocá para ampliar</span>
+        ${guardadas.length ? `<span class="ayuda">${UI.plural(guardadas.length, 'foto')} ya
+          cargada${guardadas.length === 1 ? '' : 's'} — tocá para ampliar</span>
           <div class="fotos" id="fotos-guardadas"></div>` : ''}
         <div class="fotos" id="fotos">
           <button class="btn-foto" id="btn-foto" type="button">

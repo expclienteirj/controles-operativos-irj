@@ -14,12 +14,12 @@ const Informes = (() => {
   const $ = (sel) => document.querySelector(sel);
 
   const EXPORTS = [
-    { clave: 'controles', titulo: 'Controles diarios',
+    { clave: 'controles', titulo: 'Recorridas diarias',
       detalle: 'Una fila por sector y día, con el porcentaje que aportó al mes.' },
     { clave: 'desvios', titulo: 'Desvíos registrados',
       detalle: 'Cada hallazgo con su sector, ítem, severidad, observación y auditor.' },
     { clave: 'no-conformidades', titulo: 'No conformidades',
-      detalle: 'Las NC del período con su prioridad, estado y fecha de resolución.' },
+      detalle: 'Las no conformidades del período con su prioridad, estado y fecha de resolución.' },
     { clave: 'los', titulo: 'Niveles de servicio',
       detalle: 'Estado de los 11 ítems del manual LoS.' },
   ];
@@ -36,7 +36,7 @@ const Informes = (() => {
         <div class="aviso advertencia">
           <strong>Sin conexión</strong>
           Los informes los genera el servidor, así que necesitan red. Podés
-          seguir cargando controles y descargarlos cuando vuelva la conexión.
+          seguir cargando recorridas y descargarlos cuando vuelva la conexión.
         </div>`);
     }
 
@@ -139,7 +139,7 @@ const Informes = (() => {
     // antes de descargar, no que explique un PDF ya emitido.
     const aviso = sinDatos
       ? `<div class="aviso advertencia">
-           <strong>Sin controles cerrados en el período</strong>
+           <strong>Sin recorridas cerradas en el período</strong>
            El informe se genera igual y deja constancia de que no hubo auditorías,
            pero no habrá porcentaje de cumplimiento que certificar.
          </div>`
@@ -158,12 +158,12 @@ const Informes = (() => {
              </div>`
           : `<div class="aviso info">
                <strong>Mes completo</strong>
-               Los ${comp.dias_esperados} días tienen control cerrado.
+               Los ${comp.dias_esperados} días tienen su recorrida cerrada.
              </div>`;
 
     const abiertos = comp.dias_abiertos.length
       ? `<div class="aviso advertencia">
-           <strong>${comp.dias_abiertos.length} control(es) sin cerrar</strong>
+           <strong>${UI.plural(comp.dias_abiertos.length, 'recorrida')} sin cerrar</strong>
            No entran en el informe. Conviene cerrarlos antes de emitirlo.
          </div>` : '';
 
@@ -204,7 +204,7 @@ const Informes = (() => {
         <div class="tarjeta">
           <h2>Informe de una recorrida</h2>
           <p style="margin:0;font-size:13px;color:var(--gris)">
-            No hay controles registrados en ${UI.esc(UI.nombrePeriodo(periodo))}.
+            No hay recorridas registradas en ${UI.esc(UI.nombrePeriodo(periodo))}.
           </p>
         </div>`;
     }
@@ -229,11 +229,11 @@ const Informes = (() => {
           evidencia fotográfica a tamaño completo. Cada turno tiene su informe.
         </p>
         ${abiertos ? `<div class="aviso info">
-          Hay ${abiertos} control(es) sin cerrar. Se pueden descargar igual,
+          Hay ${UI.plural(abiertos, 'recorrida')} sin cerrar. Se pueden descargar igual,
           pero el informe lo aclara y los sectores sin confirmar no computan.
         </div>` : ''}
         <div class="campo">
-          <label for="dia">Día del control</label>
+          <label for="dia">Día de la recorrida</label>
           <select id="dia">${opciones}</select>
         </div>
         <button class="btn btn-primario btn-bloque btn-grande" id="pdf-dia">
@@ -248,13 +248,13 @@ const Informes = (() => {
     const faltaConfig = dash.requieren_configuracion.length;
     const aviso = faltaConfig
       ? `<div class="aviso advertencia">
-           <strong>${faltaConfig} ítem(s) sin inventario cargado</strong>
-           Aparecerán como "Requiere configuración" en el informe. Se cargan
+           <strong>${UI.plural(faltaConfig, 'ítem')} sin inventario cargado</strong>
+           Aparecerán como «Requiere configuración» en el informe. Se cargan
            desde Configuración del Aeropuerto.
          </div>`
       : dash.items_sin_datos.length
         ? `<div class="aviso info">
-             <strong>${dash.items_sin_datos.length} ítem(s) sin relevar</strong>
+             <strong>${UI.plural(dash.items_sin_datos.length, 'ítem')} sin relevar</strong>
              No se computan como incumplimiento, pero tampoco como cumplimiento.
            </div>`
         : '';

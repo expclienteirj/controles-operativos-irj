@@ -275,7 +275,7 @@ def informe_limpieza(conn: sqlite3.Connection, periodo: str,
     inf.dato_grande(
         'Cumplimiento general del servicio',
         pct(resumen['porcentaje_general']),
-        f"calculado sobre {resumen['turnos_considerados']} recorrida(s) "
+        f"calculado sobre {services.plural(resumen['turnos_considerados'], 'recorrida')} "
         f"en {resumen['dias_considerados']} de {resumen['dias_del_mes']} días",
         VERDE if (resumen['porcentaje_general'] or 0) >= 0.9 else AMBAR)
 
@@ -345,8 +345,8 @@ def informe_limpieza(conn: sqlite3.Connection, periodo: str,
     if equip.get('exigidos'):
         inf.titulo_seccion('Maquinarias y equipos exigidos')
         inf.parrafo(
-            f"El pliego exige {equip['exigidos']} equipo(s). Cada uno aporta sus "
-            f"días en servicio sobre los {equip['dias_considerados']} día(s) "
+            f"El pliego exige {services.plural(equip['exigidos'], 'equipo')}. Cada uno aporta sus "
+            f"días en servicio sobre los {services.plural(equip['dias_considerados'], 'día')} "
             'transcurridos del período, y recién después se promedian entre '
             'equipos: una rotura de dos días no pesa igual que una de todo el mes.',
             9, GRIS)
@@ -633,7 +633,7 @@ def informe_los(conn: sqlite3.Connection, periodo: str,
 
     if dash['items_sin_datos']:
         inf.aviso(
-            f"{len(dash['items_sin_datos'])} ítem(s) sin datos en el período: "
+            f"{services.plural(len(dash['items_sin_datos']), 'ítem')} sin datos en el período: "
             + legible(dash['items_sin_datos']) + '. No se computan como '
             'incumplimiento, pero tampoco como cumplimiento.',
             AMBAR, 'Ítems sin relevar')
@@ -744,7 +744,7 @@ def _lineas_resultado(clave: str, r: dict) -> list[tuple]:
         if servicio.get('dias_incumplen'):
             dias = servicio['dias_incumplen']
             L.append(("Artefactos en servicio",
-                      f"{len(dias)} día(s) por debajo del objetivo "
+                      f"{services.plural(len(dias), 'día')} por debajo del objetivo "
                       f"(desde {dias[0]})", ROJO))
         elif servicio.get('cumple'):
             L.append(("Artefactos en servicio", "Todos los días en objetivo", VERDE))
@@ -804,7 +804,8 @@ def _lineas_resultado(clave: str, r: dict) -> list[tuple]:
     elif clave == 'pista_rodajes':
         d = r.get('disponibilidad', {})
         L.append(('Disponibilidad en horario operativo',
-                  f"{d.get('eventos_no_programados', 0)} evento(s) no programado(s)",
+                  f"{services.plural(d.get('eventos_no_programados', 0), 'evento')} no programado"
+                      f"{'' if d.get('eventos_no_programados', 0) == 1 else 's'}",
                   ok(d.get('cumple'))))
         for tipo in ('pista', 'rodaje'):
             p = r.get(tipo) or {}

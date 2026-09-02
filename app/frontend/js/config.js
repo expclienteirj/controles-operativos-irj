@@ -198,7 +198,7 @@ const Config = (() => {
         <h2>Primera configuración · ${onboarding.completos} de ${onboarding.total}</h2>
         <p style="margin:0 0 8px;font-size:14px;color:var(--gris)">
           Falta cargar el inventario físico del aeropuerto. Hasta que esté,
-          ${faltan.length} ítem(s) del módulo LoS no se pueden relevar y quedan
+          ${UI.plural(faltan.length, 'ítem')} del módulo LoS no se pueden relevar y quedan
           como <strong>Sin datos</strong> — nunca como 100%.
         </p>
         <div class="barra-progreso" style="margin-bottom:12px">
@@ -232,7 +232,7 @@ const Config = (() => {
       tipo: 'booleano' },
     { clave: 'cobertura_minima_mes', etiqueta: 'Cobertura mínima del mes',
       tipo: 'porcentaje',
-      ayuda: 'Proporción de días con control cerrado por debajo de la cual la '
+      ayuda: 'Proporción de días con recorrida cerrada por debajo de la cual la '
            + 'certificación se emite con advertencia. Los días sin auditar nunca '
            + 'penalizan al contratista.' },
   ];
@@ -363,7 +363,7 @@ const Config = (() => {
       : `<div class="aviso advertencia" style="margin:0">
            <strong>Sin cargar</strong>
            Mientras esté vacío, el ítem LoS asociado queda como
-           "Requiere configuración".
+           «Requiere configuración».
          </div>`;
 
     return `<div class="tarjeta">
@@ -546,27 +546,27 @@ const Config = (() => {
           <strong>No surge del pliego</strong>
           El PET indica que la calidad se ajusta por la cantidad de no
           conformidades pero no fija la fórmula. Por eso el descuento viene
-          <strong>desactivado</strong>: las NC se registran e informan, pero no
-          bajan el porcentaje. Activalo solo si se negocia un criterio con el
+          <strong>desactivado</strong>: las no conformidades se registran e
+          informan, pero no bajan el porcentaje. Activalo solo si se negocia un criterio con el
           contratista, y marcá la casilla de confirmado.
         </div>
         ${campoConfig({ clave: 'penalizacion_nc_activa', tipo: 'booleano',
                         etiqueta: 'Aplicar descuento por no conformidades',
-                        ayuda: 'Desactivado, las NC se registran e informan '
+                        ayuda: 'Desactivado, las no conformidades se registran e informan '
                              + 'pero no descuentan del porcentaje. Activar solo '
                              + 'si se acordó un criterio con el contratista: '
                              + 'el pliego no fija ninguna fórmula.' },
                       cfg.penalizacion_nc_activa)}
         ${campoConfig({ clave: 'penalizacion_por_nc', tipo: 'porcentaje',
-                        etiqueta: 'Descuento por cada NC abierta',
+                        etiqueta: 'Descuento por cada no conformidad abierta',
                         ayuda: 'Solo se aplica si el descuento está activado.' },
                       cfg.penalizacion_por_nc)}
         ${campoConfig({ clave: 'penalizacion_nc_tope_activo', tipo: 'booleano',
                         etiqueta: 'Aplicar un tope al descuento acumulado',
-                        ayuda: 'Desactivado, el descuento crece con cada NC. '
+                        ayuda: 'Desactivado, el descuento crece con cada no conformidad. '
                              + 'Con tope, en cuanto se alcanza deja de '
                              + 'distinguir un mes de otro: como cada desvío '
-                             + 'genera una NC, cualquier mes real lo alcanza.' },
+                             + 'genera una no conformidad, cualquier mes real lo alcanza.' },
                       cfg.penalizacion_nc_tope_activo)}
         ${campoConfig({ clave: 'penalizacion_nc_tope', tipo: 'porcentaje',
                         etiqueta: 'Tope acumulado del descuento',
@@ -796,15 +796,15 @@ const Config = (() => {
         <div class="campo">
           <label for="pd-hhp">Horas hombre perdidas por ausencias
             <span class="ayuda">Cargalo aunque sean cero: vacío no cuenta como
-              "no se perdió ninguna", cuenta como sin datos y bloquea la
+              «no se perdió ninguna», cuenta como sin datos y bloquea la
               certificación.</span></label>
           <input id="pd-hhp" type="number" min="0" step="0.5"
                  value="${d.horas_hombre_perdidas ?? ''}">
         </div>
         <h3 style="font-size:14px;margin:18px 0 8px">Ítems binarios</h3>
         <div class="aviso info">
-          Estos ítems dan 100% con cero hallazgos. Para que "nadie los revisó"
-          no se confunda con "se revisaron y estaban bien", exigen que marques
+          Estos ítems dan 100% con cero hallazgos. Para que «nadie los revisó»
+          no se confunda con «se revisaron y estaban bien», exigen que marques
           explícitamente que se verificaron.
         </div>
         <div class="campo-linea">
@@ -859,7 +859,7 @@ const Config = (() => {
             </div>`).join('')
             : `<div class="aviso advertencia" style="margin:0">
                  <strong>Sin insumos cargados</strong>
-                 El ítem "Disponibilidad de insumos" queda como Sin datos y su
+                 El ítem «Disponibilidad de insumos» queda como Sin datos y su
                  peso se redistribuye entre los demás.
                </div>`}
         </div>
@@ -927,12 +927,12 @@ const Config = (() => {
     const estado = r.porcentaje === null
       ? `<div class="aviso info" style="margin:0 0 14px">
            <strong>Sin datos todavía</strong>
-           ${UI.esc(r.motivo || 'Se calcula con los controles diarios cerrados.')}
+           ${UI.esc(r.motivo || 'Se calcula con las recorridas diarias cerradas.')}
          </div>`
       : `<div class="aviso ${r.porcentaje === 1 ? 'info' : 'advertencia'}"
               style="margin:0 0 14px">
            <strong>Disponibilidad ${Calc.porcentaje(r.porcentaje)}</strong>
-           Promedio sobre ${r.dias_considerados} día(s) con control cerrado.
+           Promedio sobre ${UI.plural(r.dias_considerados, 'día')} con recorrida cerrada.
            ${conFaltas.length
              ? conFaltas.map((e) => `${UI.esc(e.nombre)}: ${e.dias_fuera_servicio} día(s)`)
                         .join(' · ')
@@ -945,7 +945,7 @@ const Config = (() => {
         <p style="margin:0 0 12px;font-size:13px;color:var(--gris)">
           El ítem 4 mide qué proporción de los equipos exigidos estuvo
           disponible. Marcá cuáles rigen este período; los días fuera de
-          servicio se cargan en el control diario.
+          servicio se cargan en la recorrida diaria.
         </p>
         ${estado}
         <div class="lista-items">

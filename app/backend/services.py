@@ -29,6 +29,49 @@ def _marcadores(n: int) -> str:
     return ",".join("?" * n)
 
 
+MESES_ES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+            "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+
+
+def _fecha_legible(iso: str) -> str:
+    """'2026-09-01' -> '1 de septiembre'.
+
+    Las fechas ISO son para la máquina. En un aviso que el auditor lee de
+    corrido, '2026-09-01' obliga a decodificar lo que la frase ya podía decir.
+    El año se omite: todos estos avisos hablan del mes en curso.
+    """
+    try:
+        _, mes, dia = iso.split("-")
+        return f"{int(dia)} de {MESES_ES[int(mes) - 1]}"
+    except (ValueError, IndexError):
+        return iso
+
+
+def plural(n: int, singular: str, forma_plural: str | None = None) -> str:
+    """«1 día» / «3 días», en vez de «1 día(s)».
+
+    Los textos que arma el backend —novedades, avisos de certificación,
+    informes— también los lee el auditor, así que siguen la misma regla que la
+    interfaz. Gemela de `UI.plural` en el frontend.
+    """
+    if n == 1:
+        return f"{n} {singular}"
+    if forma_plural:
+        return f"{n} {forma_plural}"
+    # -ción/-sión pierden la tilde al pluralizar: operación → operaciones.
+    if singular.endswith("ción"):
+        return f"{n} {singular[:-4]}ciones"
+    if singular.endswith("sión"):
+        return f"{n} {singular[:-4]}siones"
+    fin = singular[-1:].lower()
+    if fin == "z":
+        return f"{n} {singular[:-1]}ces"
+    # "es" solo para las consonantes que lo llevan en español: un extranjerismo
+    # como "ítem" termina en -m y hace "ítems", no "ítemes".
+    sufijo = "s" if fin in "aeiouáéíóú" else ("es" if fin in "lrndj" else "s")
+    return f"{n} {singular}{sufijo}"
+
+
 def estado_control(conn: sqlite3.Connection, control_id: int) -> dict:
     """Estado de un control (Qn): % por sector y % general.
 
@@ -887,7 +930,7 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
         pend_limpieza.append(_pendiente(
             f"Cobertura del mes en {mes['cobertura'] * 100:.0f}%, por debajo "
             f"del {mes['cobertura_minima'] * 100:.0f}% mínimo",
-            f"{sin_auditar} día(s) vencidos sin recorrida. No se pueden cargar "
+            f"{plural(sin_auditar, 'día')} vencidos sin recorrida. No se pueden cargar "
             "a posteriori: la cobertura del mes ya quedó fijada."
             if sin_auditar else None))
 
@@ -913,7 +956,7 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
     pend_los = []
     if sin_datos:
         pend_los.append(_pendiente(
-            f"{len(sin_datos)} ítem(s) del manual sin relevar",
+            f"{plural(len(sin_datos), 'ítem')} del manual sin relevar",
             "Sin el dato el ítem no cuenta como cumplido: queda en Sin datos.",
             [{"clave": i, "nombre": i, "ruta": f"/los/{i}"} for i in sin_datos]))
 
@@ -961,12 +1004,12 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
             [{"nombre": c, "ruta": "/config/periodo"} for c in campos]))
     if activos and relevados < activos:
         pend_config.append(_pendiente(
-            f"{activos - relevados} insumo(s) sin relevar",
+            f"{plural(activos - relevados, 'insumo')} sin relevar",
             "Alimentan el ítem 5 de la certificación.",
             [{"nombre": "Stock de insumos", "ruta": "/config/periodo"}]))
     if inventario:
         pend_config.append(_pendiente(
-            f"{len(inventario)} ítem(s) de inventario sin cargar",
+            f"{plural(len(inventario), 'ítem')} de inventario sin cargar",
             "Hasta cargarlos, los ítems LoS que dependen del inventario quedan "
             "en Sin datos.",
             [{"nombre": p["item"], "ruta": "/config/inventario"}
@@ -1260,7 +1303,7 @@ def _advertencias_certificacion(conn, nc_abiertas, penalizacion, resultado,
             "mensaje": (
                 f"Se auditaron {hechos} de {esperados} días del mes "
                 f"(cobertura {comp['cobertura']:.0%}). "
-                + (f"{len(vencidos)} día(s) quedaron sin control. "
+                + (f"{plural(len(vencidos), 'día')} quedaron sin recorrida. "
                    if vencidos else "")
                 + "Los días sin auditar no computan ni penalizan al contratista."),
             "dias_auditados": hechos, "dias_esperados": esperados,
@@ -1271,7 +1314,7 @@ def _advertencias_certificacion(conn, nc_abiertas, penalizacion, resultado,
             "codigo": "CONTROLES_ABIERTOS",
             "nivel": "ADVERTENCIA",
             "mensaje": (
-                f"Hay {len(comp['dias_abiertos'])} control(es) iniciados y sin "
+                f"Hay {plural(len(comp['dias_abiertos']), 'recorrida')} iniciadas y sin "
                 "cerrar: " + ", ".join(comp["dias_abiertos"][:5])
                 + ("…" if len(comp["dias_abiertos"]) > 5 else "")
                 + ". Un control sin cerrar no entra en el cálculo. "
@@ -1290,7 +1333,7 @@ def _advertencias_certificacion(conn, nc_abiertas, penalizacion, resultado,
                 "El PET indica que la calidad se ajusta según las no "
                 "conformidades pero no fija ninguna fórmula, así que no se "
                 "aplica ninguna. Se registran, se cuentan y se informan"
-                + (f" ({nc_abiertas} abierta(s) en el período)" if nc_abiertas else "")
+                + (f" ({plural(nc_abiertas, 'abierta')} en el período)" if nc_abiertas else "")
                 + ". Si se acuerda un criterio con el contratista, se activa en "
                   "Configuración → Certificación."),
         })
@@ -1313,7 +1356,8 @@ def _advertencias_certificacion(conn, nc_abiertas, penalizacion, resultado,
         }
         if nc_abiertas:
             aviso["mensaje"] += (
-                f" Este período tiene {nc_abiertas} NC abierta(s), por lo que el "
+                f" Este período tiene {plural(nc_abiertas, 'no conformidad', 'no conformidades')} "
+                f"abierta{'' if nc_abiertas == 1 else 's'}, por lo que el "
                 "porcentaje a certificar depende de ese valor.")
         avisos.append(aviso)
 
@@ -2371,20 +2415,21 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
     if demoradas:
         peor = max(p["dias_pendiente"] for p in demoradas)
         agregar("nc_demoradas", CRITICIDAD_ALTA,
-                f"{len(demoradas)} no conformidad(es) demorada(s)",
+                f"{plural(len(demoradas), 'no conformidad', 'no conformidades')} "
+                f"demorada{'' if len(demoradas) == 1 else 's'}",
                 f"Sin resolver hace {peor} días o más. Verificalas en recorrida.",
                 cantidad=len(demoradas), accion=ACCION_RESOLVER_NC,
                 datos={"no_conformidades": demoradas})
     if inmediatas:
         agregar("nc_inmediatas", CRITICIDAD_ALTA,
-                f"{len(inmediatas)} no conformidad(es) de resolución inmediata",
+                f"{plural(len(inmediatas), 'no conformidad', 'no conformidades')} de resolución inmediata",
                 f"{inmediatas[0]['sector'] or inmediatas[0]['origen']}: "
                 f"{inmediatas[0]['descripcion']}",
                 cantidad=len(inmediatas), accion=ACCION_RESOLVER_NC,
                 datos={"no_conformidades": inmediatas})
     if programadas:
         agregar("nc_pendientes", CRITICIDAD_MEDIA,
-                f"{len(programadas)} no conformidad(es) sin resolver",
+                f"{plural(len(programadas), 'no conformidad', 'no conformidades')} sin resolver",
                 "De resolución programada.",
                 cantidad=len(programadas), accion=ACCION_RESOLVER_NC,
                 datos={"no_conformidades": programadas})
@@ -2399,8 +2444,9 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
         # lo fuera, la cuenta de "críticas" mezclaría lo que hay que hacer hoy
         # con lo que ya no tiene arreglo, y se aprendería a ignorar el número.
         agregar("dias_sin_control", CRITICIDAD_MEDIA,
-                f"{len(vencidos)} día(s) sin ningún control",
-                f"El último fue el {vencidos[-1]}. Ya no se pueden cargar: la "
+                f"{plural(len(vencidos), 'día')} sin ninguna recorrida",
+                f"El último fue el {_fecha_legible(vencidos[-1])}. Ya no se pueden "
+                "cargar: la "
                 "recorrida que no se hizo queda como no hecha. No penalizan al "
                 "contratista, pero bajan la representatividad del mes.",
                 cantidad=len(vencidos))
@@ -2417,8 +2463,8 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
 
     if pasados:
         agregar("turnos_faltantes", CRITICIDAD_MEDIA,
-                f"{len(pasados)} día(s) con una sola recorrida",
-                "Se exigen dos controles diarios. El turno que no se hizo ya no "
+                f"{plural(len(pasados), 'día')} con una sola recorrida",
+                "Se exigen dos recorridas diarias. El turno que no se hizo ya no "
                 "se puede cargar.", cantidad=len(pasados))
 
     # La única parte del plan de auditoría que todavía se puede cumplir: la
@@ -2471,8 +2517,8 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
         # una máquina realmente fuera de servicio— pero sin botón de alta,
         # porque no hay nada que cerrar por esa vía.
         agregar("maquinaria_baja", CRITICIDAD_ALTA,
-                f"{len(fuera)} máquina(s) fuera de servicio",
-                f"{fuera[0]['equipo']}" + (f" lleva {dias} día(s) de baja."
+                f"{plural(len(fuera), 'máquina')} fuera de servicio",
+                f"{fuera[0]['equipo']}" + (f" lleva {plural(dias, 'día')} de baja."
                                            if dias else " desde hoy.")
                 + " Descuenta del porcentaje a certificar.",
                 cantidad=len(fuera), accion=ACCION_ALTA_MAQUINA,
@@ -2490,7 +2536,7 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
             ruta = (f"/los/{incumplen[0]['clave']}" if len(incumplen) == 1
                     else "/los")
             agregar("los_no_cumple", CRITICIDAD_ALTA,
-                    f"{len(incumplen)} ítem(s) de LoS no cumplen",
+                    f"{plural(len(incumplen), 'ítem')} de LoS no cumple{'' if len(incumplen) == 1 else 'n'}",
                     ", ".join(i["nombre"] for i in incumplen[:3])
                     + ("…" if len(incumplen) > 3 else ""),
                     ruta, len(incumplen), accion=ACCION_IR)
@@ -2505,7 +2551,7 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
             # A la pestaña de inventario, no a la raíz de configuración: es la
             # única de las cuatro donde está lo que falta cargar.
             agregar("inventario", CRITICIDAD_MEDIA,
-                    f"{len(pendiente_inv)} ítem(s) sin inventario cargado",
+                    f"{plural(len(pendiente_inv), 'ítem')} sin inventario cargado",
                     "No se pueden relevar y quedan como Sin datos.",
                     "/config/inventario", len(pendiente_inv), accion=ACCION_IR)
 

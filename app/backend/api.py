@@ -97,7 +97,8 @@ def login(ctx):
     faltan = services.login_bloqueado(ctx["conn"], usuario, ip)
     if faltan is not None:
         raise ErrorAPI(
-            f"Demasiados intentos fallidos. Reintentá en {faltan} minuto(s).", 429)
+            f"Demasiados intentos fallidos. Reintentá en "
+            f"{services.plural(faltan, 'minuto')}.", 429)
 
     fila = ctx["conn"].execute(
         "SELECT id, usuario, nombre, rol, password_hash, activo FROM usuarios "

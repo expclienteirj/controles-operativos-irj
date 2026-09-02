@@ -486,6 +486,32 @@ const UI = (() => {
 
   /* -------------------------------------------------------------- varios -- */
 
+  /**
+   * "1 día" / "3 días", en vez de "1 día(s)".
+   *
+   * El paréntesis se usaba en toda la app para no resolver el plural, y donde
+   * peor queda es justo en el caso más frecuente: "1 día(s) sin recorrida"
+   * obliga a leer dos veces algo que el número ya resolvió.
+   *
+   * El plural se deduce con la regla del español —vocal final suma "s",
+   * consonante suma "es"— y se puede pasar a mano cuando no aplica.
+   */
+  function plural(n, singular, formaPlural) {
+    if (n === 1) return `${n} ${singular}`;
+    if (formaPlural) return `${n} ${formaPlural}`;
+    // -ción/-sión pierden la tilde al pluralizar (operación → operaciones):
+    // es el caso que una regla ingenua rompe, y acá hay varios.
+    if (/ción$/i.test(singular)) return `${n} ${singular.replace(/ción$/i, 'ciones')}`;
+    if (/sión$/i.test(singular)) return `${n} ${singular.replace(/sión$/i, 'siones')}`;
+    const fin = singular.slice(-1).toLowerCase();
+    if (fin === 'z') return `${n} ${singular.slice(0, -1)}ces`;
+    // "es" solo para las consonantes que lo llevan en español. Un extranjerismo
+    // como "ítem" termina en -m y hace "ítems", no "ítemes".
+    const sufijo = 'aeiouáéíóú'.includes(fin) ? 's'
+                 : 'lrndj'.includes(fin) ? 'es' : 's';
+    return `${n} ${singular}${sufijo}`;
+  }
+
   function fecha(iso) {
     if (!iso) return '—';
     const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T'));
@@ -626,7 +652,7 @@ const UI = (() => {
   return { esc, toast, toastDeshacer, toastAccion,
            abrirHoja, cerrarHoja, cerrarTodas, cerrarParaNavegar,
            confirmar, tomarFoto, galeria, visorFotos, avisoPendientes,
-           calendarioMes,
+           calendarioMes, plural,
            comprimirImagen, fecha, fechaLarga, fechaCorta, hora,
            hoyISO, ahoraISO, periodoActual, nombrePeriodo };
 })();
