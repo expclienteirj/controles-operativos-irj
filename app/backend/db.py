@@ -322,6 +322,22 @@ def migrar(conn: sqlite3.Connection) -> list[str]:
         conn.execute("ALTER TABLE periodo_datos DROP COLUMN monto_adjudicado")
         aplicadas.append("periodo_datos: baja de monto_adjudicado")
 
+    # Los ítems 1 y 2 pedían un número de hallazgos que el cálculo descartaba:
+    # `calc.item_binario` mira si es mayor que cero, porque el PET dice que "ante
+    # un hallazgo evidenciado corresponderá la penalización completa del item".
+    # La pantalla prometía una precisión que la fórmula no usa. Ahora el número
+    # es una bandera y lo que se pide es la descripción del hallazgo, que es lo
+    # que el PET sí exige registrar y lo que sostiene la penalización si el
+    # contratista la discute.
+    #
+    # Los contadores ya cargados quedan como están: mayor que cero sigue
+    # significando lo mismo, y pisarlos con un 1 sería reescribir lo que alguien
+    # informó para que se parezca al formulario nuevo.
+    for col in ("detalle_hallazgo_documentacion", "detalle_hallazgo_ley_19587"):
+        if col not in columnas("periodo_datos"):
+            conn.execute(f"ALTER TABLE periodo_datos ADD COLUMN {col} TEXT")
+            aplicadas.append(f"periodo_datos: alta de {col}")
+
     # La evidencia LoS pasó a identificar qué sub-ítem retrata.
     if "subitem" not in columnas("fotos"):
         conn.execute("ALTER TABLE fotos ADD COLUMN subitem TEXT")

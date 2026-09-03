@@ -24,7 +24,7 @@
  *     cerrar sesión y estas tablets las comparten varios auditores.
  */
 
-const VERSION = 'irj-v24';
+const VERSION = 'irj-v25';
 
 // Caché de evidencia fotográfica, propiedad de `API.imagen`. No la maneja el
 // worker, pero sí tiene que sobrevivir a sus actualizaciones: el barrido de

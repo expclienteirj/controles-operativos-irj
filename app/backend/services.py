@@ -1262,6 +1262,19 @@ def certificacion(conn: sqlite3.Connection, periodo: str,
         "no_conformidades": nc_periodo,
         "descuento_aplicado": calc.descuento_por_nc(nc_periodo, penalizacion, tope),
     }
+    # Los ítems 1 y 2 caen enteros ante un solo hallazgo. Un 0% sin explicación
+    # al lado no le sirve a nadie: ni al que firma ni al contratista que lo
+    # recibe. Se viaja el detalle para que la pantalla y el PDF puedan decir por
+    # qué se perdió el 10%.
+    resultado["hallazgos_binarios"] = {
+        clave: (datos.get(campo_detalle) or "").strip() or None
+        for clave, campo_bandera, campo_detalle in (
+            ("documentacion", "hallazgos_documentacion",
+             "detalle_hallazgo_documentacion"),
+            ("ley_19587", "hallazgos_ley_19587",
+             "detalle_hallazgo_ley_19587"))
+        if datos.get(campo_bandera)
+    }
     resultado["completitud"] = resumen["completitud"]
     resultado["advertencias"] = _advertencias_certificacion(
         conn, nc_abiertas, penalizacion, resultado, resumen)

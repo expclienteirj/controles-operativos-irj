@@ -335,6 +335,16 @@ def informe_limpieza(conn: sqlite3.Connection, periodo: str,
     inf.tabla([('Ítem', 250, 'izq'), ('Peso', 70, 'der'),
                ('Resultado', 95, 'der'), ('Aporte', 96, 'der')], filas)
 
+    # Los ítems 1 y 2 caen a 0% enteros ante un solo hallazgo (PET: "corresponderá
+    # la penalización completa del item"). Un cero sin explicación al lado no es
+    # una certificación defendible: acá va cuál fue la falta detectada.
+    for clave, detalle in (cert.get('hallazgos_binarios') or {}).items():
+        inf.parrafo(
+            f"{NOMBRE_ITEM_CERT.get(clave, clave)}: se registró un hallazgo, "
+            'que penaliza el ítem completo. '
+            + (detalle or 'Sin descripción registrada.'),
+            9, ROJO)
+
     for a in cert.get('advertencias', []):
         if a['codigo'] in ('COBERTURA_INSUFICIENTE', 'MES_INCOMPLETO'):
             continue          # ya se informó arriba

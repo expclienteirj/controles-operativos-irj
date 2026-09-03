@@ -702,7 +702,25 @@ input.invalido { border-color: var(--rojo); background: var(--rojo-fondo); }
 .aviso.info { background: #eef4fb; border-color: var(--azul-claro); }
 .aviso.advertencia { background: var(--amarillo-fondo); border-color: var(--amarillo); }
 .aviso.error { background: var(--rojo-fondo); border-color: var(--rojo); }
+.aviso.ok { background: var(--verde-fondo); border-color: var(--verde); }
 .aviso strong { display: block; margin-bottom: 2px; }
+
+/* Ítems 1 y 2 de la certificación. Caen enteros ante un solo hallazgo, así que
+   la consecuencia de cada respuesta se muestra al elegirla y no después. */
+.item-binario { padding: 4px 0 10px; border-bottom: 1px solid var(--borde); }
+.item-binario:last-of-type { border-bottom: 0; }
+.item-binario .campo-linea { border-bottom: 0; }
+.item-binario .campo-linea select { max-width: 230px; }
+.item-binario .ayuda {
+  display: block; font-weight: 400; color: var(--gris); font-size: 13px;
+  margin-top: 2px;
+}
+.item-binario .consecuencia { margin: 0; padding: 8px 12px; font-size: 13px; }
+.item-binario .campo-hallazgo { margin-top: 10px; }
+.item-binario .campo-hallazgo label {
+  display: block; font-weight: 500; font-size: 14px; margin-bottom: 6px;
+}
+.item-binario .campo-hallazgo textarea { width: 100%; }
 
 /* Pendientes de liquidación, arriba de la pantalla del módulo. Cada uno lleva
    su explicación y los accesos directos a lo que hay que tocar: el objetivo es

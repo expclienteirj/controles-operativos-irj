@@ -210,6 +210,14 @@ COLUMNAS_QUE_ADMITEN_SIN_DATO = (("periodo_datos", "horas_hombre_perdidas"),)
 # el dato no esté. `monto_adjudicado` es el valor del contrato.
 COLUMNAS_DADAS_DE_BAJA = (("periodo_datos", "monto_adjudicado"),)
 
+# Columnas nuevas que el formulario ya escribe. El caso simétrico del anterior:
+# en Postgres el ALTER va a mano, y si no se corrió el guardado de los datos del
+# período falla recién cuando un admin intenta cargar el mes.
+COLUMNAS_QUE_DEBEN_EXISTIR = (
+    ("periodo_datos", "detalle_hallazgo_documentacion"),
+    ("periodo_datos", "detalle_hallazgo_ley_19587"),
+)
+
 
 def _claves_config_faltantes(conn) -> list[str]:
     """Claves de configuración que el seed define y la base no tiene.
@@ -260,6 +268,9 @@ def chequeos_estructurales(conn) -> list[str]:
         for tabla, columna in COLUMNAS_DADAS_DE_BAJA:
             if db.columna_existe(conn, tabla, columna):
                 problemas.append(f"{tabla}.{columna}: dada de baja, sigue en la base")
+        for tabla, columna in COLUMNAS_QUE_DEBEN_EXISTIR:
+            if not db.columna_existe(conn, tabla, columna):
+                problemas.append(f"{tabla}.{columna}: falta en la base")
     except Exception:
         pass
     return problemas
@@ -995,11 +1006,33 @@ def put_periodo_datos(ctx, periodo):
     # (ver `db.migrar`). Queda fuera de la lista blanca para que un cliente
     # viejo no lo reintroduzca escribiendo en una columna que ya no existe.
     campos = ("horas_hombre_programadas", "horas_hombre_perdidas",
-              "documentacion_verificada", "hallazgos_documentacion",
-              "ley_19587_verificada", "hallazgos_ley_19587")
+              "documentacion_verificada",
+              "hallazgos_documentacion", "detalle_hallazgo_documentacion",
+              "ley_19587_verificada",
+              "hallazgos_ley_19587", "detalle_hallazgo_ley_19587")
     datos = {c: ctx["body"][c] for c in campos if c in ctx["body"]}
     if not datos:
         raise ErrorAPI(f"Nada para actualizar. Campos: {', '.join(campos)}")
+
+    # Un hallazgo hace caer el ítem entero —10% de la certificación— y el PET
+    # pide que los registros "documentarán las faltas detectadas". Sin describir
+    # cuál fue, la penalización queda sin nada que la sostenga si el contratista
+    # la discute. Se exige acá y no solo en la pantalla porque el formulario no
+    # es el único que escribe: la cola de sincronización manda el mismo cuerpo.
+    for bandera, detalle, nombre in (
+            ("hallazgos_documentacion", "detalle_hallazgo_documentacion",
+             "documentación obligatoria"),
+            ("hallazgos_ley_19587", "detalle_hallazgo_ley_19587",
+             "Ley 19587")):
+        if bandera not in datos:
+            continue
+        if int(datos[bandera] or 0) > 0 and not (datos.get(detalle) or "").strip():
+            raise ErrorAPI(f"Describí el hallazgo de {nombre}: penaliza el ítem "
+                           "completo y tiene que quedar registrado cuál fue.")
+        # Sin hallazgo no queda descripción colgada de una penalización que ya
+        # no existe.
+        if int(datos[bandera] or 0) == 0 and detalle in datos:
+            datos[detalle] = None
 
     ctx["conn"].execute("INSERT OR IGNORE INTO periodo_datos (periodo) VALUES (?)", (periodo,))
     ctx["conn"].execute(

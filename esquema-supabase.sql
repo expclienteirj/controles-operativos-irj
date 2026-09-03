@@ -168,9 +168,13 @@ CREATE TABLE IF NOT EXISTS periodo_datos (
     
     
     documentacion_verificada  INTEGER NOT NULL DEFAULT 0,
-    hallazgos_documentacion   INTEGER NOT NULL DEFAULT 0,
     ley_19587_verificada      INTEGER NOT NULL DEFAULT 0,
+    -- `hallazgos_*` es bandera, no contador: el PET penaliza el ítem completo
+    -- ante un solo hallazgo. El detalle es lo que sostiene esa penalización.
+    hallazgos_documentacion   INTEGER NOT NULL DEFAULT 0,
+    detalle_hallazgo_documentacion TEXT,
     hallazgos_ley_19587       INTEGER NOT NULL DEFAULT 0,
+    detalle_hallazgo_ley_19587     TEXT,
     
     
     

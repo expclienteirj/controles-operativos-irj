@@ -566,6 +566,80 @@ class TestCertificacionAPI(TestAPI):
                               ["ley_19587", "programacion_trabajos"])
 
 
+class TestHallazgosBinarios(TestAPI):
+    """Ítems 1 y 2: el PET penaliza el ítem completo ante un solo hallazgo, y
+    pide que los registros documenten la falta detectada."""
+
+    def _cargar(self, periodo, **extra):
+        return self.admin("PUT", f"/api/periodos/{periodo}/datos", {
+            "horas_hombre_programadas": 1000, "horas_hombre_perdidas": 0,
+            "documentacion_verificada": 1, "ley_19587_verificada": 1, **extra})
+
+    def test_un_hallazgo_sin_describir_se_rechaza(self):
+        codigo, r = self._cargar("2032-01", hallazgos_documentacion=1)
+        self.assertEqual(codigo, 400)
+        self.assertIn("hallazgo", r["error"].lower())
+
+    def test_un_hallazgo_descrito_hunde_el_item_entero(self):
+        codigo, _ = self._cargar(
+            "2032-02", hallazgos_documentacion=1,
+            detalle_hallazgo_documentacion="Falta el F931 de marzo.")
+        self.assertEqual(codigo, 200)
+
+        _, cert = self.auditor("GET", "/api/periodos/2032-02/certificacion")
+        # No es proporcional: el ítem cae a cero, no descuenta una fracción.
+        self.assertEqual(cert["detalle"]["documentacion"]["valor"], 0.0)
+        self.assertEqual(cert["hallazgos_binarios"]["documentacion"],
+                         "Falta el F931 de marzo.")
+
+    def test_la_descripcion_en_blanco_no_alcanza(self):
+        codigo, _ = self._cargar("2032-03", hallazgos_ley_19587=1,
+                                 detalle_hallazgo_ley_19587="   ")
+        self.assertEqual(codigo, 400)
+
+    def test_sin_hallazgo_no_queda_descripcion_colgada(self):
+        """Corregir un hallazgo mal cargado tiene que borrar su descripción:
+        si no, el PDF explicaría una penalización que ya no se aplica."""
+        self._cargar("2032-04", hallazgos_documentacion=1,
+                     detalle_hallazgo_documentacion="Póliza vencida.")
+        codigo, _ = self._cargar("2032-04", hallazgos_documentacion=0,
+                                 detalle_hallazgo_documentacion="Póliza vencida.")
+        self.assertEqual(codigo, 200)
+
+        _, r = self.admin("GET", "/api/periodos/2032-04/datos")
+        self.assertIsNone(r["datos"]["detalle_hallazgo_documentacion"])
+        _, cert = self.auditor("GET", "/api/periodos/2032-04/certificacion")
+        self.assertEqual(cert["detalle"]["documentacion"]["valor"], 1.0)
+        self.assertEqual(cert["hallazgos_binarios"], {})
+
+    def test_verificado_sin_hallazgos_no_reporta_nada(self):
+        self._cargar("2032-05")
+        _, cert = self.auditor("GET", "/api/periodos/2032-05/certificacion")
+        self.assertEqual(cert["hallazgos_binarios"], {})
+
+    def test_el_hallazgo_cuesta_el_peso_normalizado_del_item(self):
+        """Un hallazgo cuesta el aporte completo del ítem, que NO siempre es su
+        10% nominal: cuando otros ítems quedan sin datos, su peso se redistribuye
+        entre los evaluados y el binario pasa a pesar más. Con solo los tres
+        obligatorios cargados, la documentación pesa 0,10/0,60 = 16,7%.
+
+        Está acá porque la pantalla le anuncia al admin lo que va a perder, y ese
+        anuncio tiene que seguir siendo cierto si alguien cambia los pesos."""
+        self._cargar("2032-06")
+        _, limpio = self.auditor("GET", "/api/periodos/2032-06/certificacion")
+        self._cargar("2032-06", hallazgos_documentacion=1,
+                     detalle_hallazgo_documentacion="Sin constancia de ART.")
+        _, con_hallazgo = self.auditor("GET", "/api/periodos/2032-06/certificacion")
+
+        # El ítem valía 1.0, así que su aporte previo es todo lo que se pierde.
+        self.assertAlmostEqual(limpio["porcentaje"] - con_hallazgo["porcentaje"],
+                               limpio["detalle"]["documentacion"]["aporte"],
+                               places=9)
+        # Y es más que el 10% nominal, justamente por la redistribución.
+        self.assertGreater(limpio["detalle"]["documentacion"]["aporte"],
+                           limpio["detalle"]["documentacion"]["peso"])
+
+
 class TestLoSAPI(TestAPI):
     def test_items_los_marcan_configuracion_pendiente(self):
         _, r = self.auditor("GET", "/api/los/items")

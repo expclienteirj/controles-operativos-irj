@@ -772,6 +772,72 @@ const Config = (() => {
 
   /* ========================================================= tab Período === */
 
+  /**
+   * Ítems 1 y 2 de la certificación, en un solo control de tres estados.
+   *
+   * Antes eran dos campos: un Sí/No de verificación y un número de hallazgos.
+   * El número no servía para nada —`calc.item_binario` solo mira si es mayor
+   * que cero, porque el PET penaliza el ítem completo ante un solo hallazgo—
+   * así que la pantalla pedía una precisión que el cálculo descartaba.
+   *
+   * Ahora las tres respuestas posibles están a la vista con su consecuencia al
+   * lado, que es la única forma de que quien las elige sepa lo que está
+   * firmando: sin verificar frena la certificación entera, y un hallazgo cuesta
+   * el 10% completo del ítem.
+   */
+  function itemBinario(id, titulo, ayuda, verificada, hallazgos, detalle) {
+    const estado = !verificada ? 'sin' : (hallazgos ? 'hallazgo' : 'ok');
+    const opcion = (v, texto) =>
+      `<option value="${v}" ${estado === v ? 'selected' : ''}>${texto}</option>`;
+    return `
+      <div class="item-binario" data-item="${id}">
+        <div class="campo-linea">
+          <label for="pd-${id}">
+            ${UI.esc(titulo)}
+            <span class="ayuda">${UI.esc(ayuda)}</span>
+          </label>
+          <select id="pd-${id}" data-estado="${id}">
+            ${opcion('sin', 'Sin verificar')}
+            ${opcion('ok', 'Verificada, sin hallazgos')}
+            ${opcion('hallazgo', 'Verificada, con hallazgos')}
+          </select>
+        </div>
+        <div class="consecuencia" data-consecuencia="${id}"></div>
+        <div class="campo-hallazgo" data-detalle-de="${id}"
+             ${estado === 'hallazgo' ? '' : 'hidden'}>
+          <label for="pd-${id}-det">Cuál fue el hallazgo</label>
+          <textarea id="pd-${id}-det" rows="2"
+                    placeholder="Qué faltaba o qué se constató, y cuándo."
+                    >${UI.esc(detalle || '')}</textarea>
+        </div>
+      </div>`;
+  }
+
+  // Qué le pasa a la certificación con cada respuesta. Se muestra debajo del
+  // select y cambia al elegir, para que la consecuencia no aparezca recién
+  // cuando el mes no se puede liquidar.
+  // No dice "se pierden 10 puntos" porque no siempre son 10: el peso de los
+  // ítems sin datos se redistribuye entre los evaluados, así que con pocos
+  // ítems cargados el binario pesa más que su 10% nominal. Prometer un número
+  // fijo sería mentirle al que firma.
+  const CONSECUENCIA_BINARIA = {
+    sin: ['aviso advertencia',
+          'Mientras siga sin verificar, la certificación del mes no se emite.'],
+    ok: ['aviso ok', 'El ítem aporta su peso completo: 10% de la certificación.'],
+    hallazgo: ['aviso error',
+               'El ítem cae a 0% y se pierde su peso entero: 10% de la '
+               + 'certificación, o más si otros ítems quedaron sin datos.'],
+  };
+
+  function pintarConsecuencia(panel, id) {
+    const estado = panel.querySelector(`[data-estado="${id}"]`).value;
+    const [clase, texto] = CONSECUENCIA_BINARIA[estado];
+    const caja = panel.querySelector(`[data-consecuencia="${id}"]`);
+    caja.className = `consecuencia ${clase}`;
+    caja.textContent = texto;
+    panel.querySelector(`[data-detalle-de="${id}"]`).hidden = estado !== 'hallazgo';
+  }
+
   async function panelPeriodo(panel) {
     const periodo = UI.periodoActual();
     const [datos, insumos, equipamiento] = await Promise.all([
@@ -803,34 +869,18 @@ const Config = (() => {
         </div>
         <h3 style="font-size:14px;margin:18px 0 8px">Ítems binarios</h3>
         <div class="aviso info">
-          Estos ítems dan 100% con cero hallazgos. Para que «nadie los revisó»
-          no se confunda con «se revisaron y estaban bien», exigen que marques
-          explícitamente que se verificaron.
+          Cada uno pesa 10% y no admite término medio: el PET dice que «ante un
+          hallazgo evidenciado corresponderá la penalización completa del ítem».
+          Y mientras queden sin verificar, la certificación del mes no se emite.
         </div>
-        <div class="campo-linea">
-          <label for="pd-docv">Documentación verificada este mes</label>
-          <select id="pd-docv">
-            <option value="0" ${!d.documentacion_verificada ? 'selected' : ''}>No</option>
-            <option value="1" ${d.documentacion_verificada ? 'selected' : ''}>Sí</option>
-          </select>
-        </div>
-        <div class="campo-linea">
-          <label for="pd-doch">Hallazgos de documentación</label>
-          <input id="pd-doch" type="number" min="0"
-                 value="${d.hallazgos_documentacion ?? 0}">
-        </div>
-        <div class="campo-linea">
-          <label for="pd-leyv">Ley 19587 verificada este mes</label>
-          <select id="pd-leyv">
-            <option value="0" ${!d.ley_19587_verificada ? 'selected' : ''}>No</option>
-            <option value="1" ${d.ley_19587_verificada ? 'selected' : ''}>Sí</option>
-          </select>
-        </div>
-        <div class="campo-linea">
-          <label for="pd-leyh">Hallazgos Ley 19587</label>
-          <input id="pd-leyh" type="number" min="0"
-                 value="${d.hallazgos_ley_19587 ?? 0}">
-        </div>
+        ${itemBinario('doc', 'Documentación obligatoria',
+                      'Previsional y de seguros. Es mensual, no anual.',
+                      d.documentacion_verificada, d.hallazgos_documentacion,
+                      d.detalle_hallazgo_documentacion)}
+        ${itemBinario('ley', 'Ley 19587 (seguridad e higiene)',
+                      'Elementos de protección, uniformes y capacitaciones.',
+                      d.ley_19587_verificada, d.hallazgos_ley_19587,
+                      d.detalle_hallazgo_ley_19587)}
 
         <button class="btn btn-primario btn-bloque" id="guardar-periodo"
                 style="margin-top:14px">Guardar datos del período</button>
@@ -878,16 +928,44 @@ const Config = (() => {
         // Sin `|| 0`: ese atajo convertía el campo vacío en un cero, que es
         // justamente lo que hacía indistinguible "sin cargar" de "sin pérdidas".
         horas_hombre_perdidas: num('#pd-hhp'),
-        documentacion_verificada: parseInt($('#pd-docv').value, 10),
-        hallazgos_documentacion: num('#pd-doch') || 0,
-        ley_19587_verificada: parseInt($('#pd-leyv').value, 10),
-        hallazgos_ley_19587: num('#pd-leyh') || 0,
+        ...binario('doc', 'documentacion'),
+        ...binario('ley', 'ley_19587'),
       };
+      // El backend lo rechaza igual, pero avisar acá le ahorra al admin un
+      // viaje al servidor para que le digan que faltaba una línea de texto.
+      for (const [id, titulo] of [['doc', 'documentación obligatoria'],
+                                  ['ley', 'Ley 19587']]) {
+        if (panel.querySelector(`[data-estado="${id}"]`).value === 'hallazgo'
+            && !panel.querySelector(`#pd-${id}-det`).value.trim()) {
+          UI.toast(`Describí el hallazgo de ${titulo}: penaliza el ítem completo.`,
+                   'error');
+          panel.querySelector(`#pd-${id}-det`).focus();
+          return;
+        }
+      }
       try {
         await API.put(`/api/periodos/${periodo}/datos`, cuerpo);
         UI.toast('Datos del período guardados', 'ok');
       } catch (e) { UI.toast(e.message, 'error'); }
     };
+
+    // Los tres estados del select se traducen a las tres columnas que el
+    // cálculo ya usaba: la pantalla cambió, el modelo de datos no.
+    function binario(id, campo) {
+      const estado = panel.querySelector(`[data-estado="${id}"]`).value;
+      const detalle = panel.querySelector(`#pd-${id}-det`).value.trim();
+      return {
+        [`${campo}_verificada`]: estado === 'sin' ? 0 : 1,
+        [`hallazgos_${campo}`]: estado === 'hallazgo' ? 1 : 0,
+        [`detalle_hallazgo_${campo}`]: estado === 'hallazgo' ? detalle : null,
+      };
+    }
+
+    ['doc', 'ley'].forEach((id) => {
+      pintarConsecuencia(panel, id);
+      panel.querySelector(`[data-estado="${id}"]`).onchange =
+        () => pintarConsecuencia(panel, id);
+    });
 
     // El stock se guarda al salir del campo: son muchos números y un botón
     // por fila sería peor.

@@ -223,9 +223,17 @@ CREATE TABLE IF NOT EXISTS periodo_datos (
     -- confirmación explícita del admin. Sin ella el ítem es Sin datos, igual
     -- que un sector no confirmado en el check-list.
     documentacion_verificada  INTEGER NOT NULL DEFAULT 0,
-    hallazgos_documentacion   INTEGER NOT NULL DEFAULT 0,
     ley_19587_verificada      INTEGER NOT NULL DEFAULT 0,
+    -- `hallazgos_*` es una bandera, no un contador: el PET es explícito en que
+    -- "ante un hallazgo evidenciado corresponderá la penalización completa del
+    -- item", así que uno o siete penalizan igual y contarlos no cambiaría nada.
+    -- Lo que sí cambia el peso de la penalización es poder mostrar cuál fue el
+    -- hallazgo, porque el ítem se pierde entero (10% de la certificación) y el
+    -- PET pide que los registros "documentarán las faltas detectadas".
+    hallazgos_documentacion   INTEGER NOT NULL DEFAULT 0,
+    detalle_hallazgo_documentacion TEXT,
     hallazgos_ley_19587       INTEGER NOT NULL DEFAULT 0,
+    detalle_hallazgo_ley_19587     TEXT,
     -- El ítem 4 (maquinarias) se mide sobre el inventario de equipos, no sobre
     -- horas: ver calc.item_maquinarias. Las columnas de horas máquina se
     -- eliminaron porque no eran exigibles ni medibles.
