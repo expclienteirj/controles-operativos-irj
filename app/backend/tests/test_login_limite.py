@@ -62,12 +62,37 @@ class TestFreno(Base):
 
     def test_la_ip_frena_el_barrido_de_varios_usuarios(self):
         """Probar un usuario distinto en cada intento no esquiva el freno."""
-        for i in range(services.LOGIN_MAX_INTENTOS):
+        n = services.LOGIN_MAX_INTENTOS * services.LOGIN_FACTOR_IP
+        for i in range(n - 1):
             services.registrar_intento_fallido(self.conn, f"usuario{i}", IP)
+        self.assertIsNone(services.login_bloqueado(self.conn, "otro", IP))
+        services.registrar_intento_fallido(self.conn, "usuario-final", IP)
         # Un usuario nuevo desde esa misma IP ya está frenado.
         self.assertIsNotNone(services.login_bloqueado(self.conn, "otro", IP))
         # Pero desde otra IP no.
         self.assertIsNone(services.login_bloqueado(self.conn, "otro", OTRA_IP))
+
+    def test_los_errores_de_una_persona_no_bloquean_a_los_demas_en_la_misma_ip(self):
+        """El caso del aeropuerto: todas las tablets y la oficina del admin salen
+        por la misma IP pública. Cinco PIN mal tipeados por una persona dejaban
+        afuera al administrador que tiene que desbloquearla; se vio en pantalla."""
+        self.fallar(services.LOGIN_MAX_INTENTOS, usuario="maria", ip=IP)
+        self.assertIsNotNone(services.login_bloqueado(self.conn, "maria", IP))
+        self.assertIsNone(services.login_bloqueado(self.conn, "admin", IP))
+        self.assertIsNone(services.login_bloqueado(self.conn, "jperez", IP))
+
+    def test_varias_personas_equivocandose_en_el_mismo_turno_no_traban_la_ip(self):
+        for usuario in ("maria", "juan", "luis"):
+            self.fallar(services.LOGIN_MAX_INTENTOS - 1, usuario=usuario, ip=IP)
+        self.assertIsNone(services.login_bloqueado(self.conn, "admin", IP))
+
+    def test_el_aviso_de_intentos_restantes_mide_cada_clave_con_su_umbral(self):
+        self.fallar(3, usuario="maria", ip=IP)
+        # Un usuario nuevo desde esa IP conserva su cupo propio completo.
+        self.assertEqual(services.intentos_restantes(self.conn, "nuevo", IP),
+                         services.LOGIN_MAX_INTENTOS)
+        self.assertEqual(services.intentos_restantes(self.conn, "maria", IP),
+                         services.LOGIN_MAX_INTENTOS - 3)
 
     def test_sin_ip_igual_frena_por_usuario(self):
         """Si no se pudo determinar la IP, el freno por usuario sigue valiendo."""

@@ -122,7 +122,12 @@ class TestAutenticacion(TestAPI):
         """No revelar qué usuarios existen."""
         _, r1 = self.pedir("POST", "/api/login", {"usuario": "nadie", "password": "x"})
         _, r2 = self.pedir("POST", "/api/login", {"usuario": "jperez", "password": "x"})
-        self.assertEqual(r1["error"], r2["error"])
+        # El aviso "te quedan N intentos" depende del historial de la IP, que
+        # cambia entre un pedido y el siguiente; la parte que no puede variar es
+        # la que dice qué falló.
+        base = "Usuario o contraseña incorrectos."
+        self.assertTrue(r1["error"].startswith(base), r1["error"])
+        self.assertTrue(r2["error"].startswith(base), r2["error"])
 
     def test_sin_token_es_401(self):
         codigo, _ = self.pedir("GET", "/api/sectores")
@@ -150,12 +155,21 @@ class TestAutenticacion(TestAPI):
 
     def test_cambio_de_password_valida_la_actual(self):
         codigo, _ = self.auditor("POST", "/api/password",
-                                 {"actual": "incorrecta", "nueva": "nuevaclave1"})
+                                 {"actual": "incorrecta", "nueva": "5821"})
         self.assertEqual(codigo, 401)
 
-    def test_password_nueva_debe_ser_larga(self):
-        codigo, _ = self.auditor("POST", "/api/password",
-                                 {"actual": "audit1234", "nueva": "corta"})
+    def test_el_pin_nuevo_del_auditor_debe_ser_de_cuatro_digitos(self):
+        for malo in ("corta", "123", "12345", "abcd", "nuevaclave1"):
+            codigo, _ = self.auditor("POST", "/api/password",
+                                     {"actual": "audit1234", "nueva": malo})
+            self.assertEqual(codigo, 400, malo)
+
+    def test_el_admin_conserva_la_regla_de_ocho_caracteres(self):
+        codigo, _ = self.admin("POST", "/api/password",
+                               {"actual": "admin1234", "nueva": "5821"})
+        self.assertEqual(codigo, 400)
+        codigo, _ = self.admin("POST", "/api/password",
+                               {"actual": "admin1234", "nueva": "corta"})
         self.assertEqual(codigo, 400)
 
     def test_la_sesion_sobrevive_al_reinicio_del_servidor(self):
@@ -181,8 +195,10 @@ class TestAutenticacion(TestAPI):
         token = self.login('jperez', 'audit1234')['token']
         self.pedir('GET', '/api/sectores', token=token)
         conn = db.conectar()
+        # La base guarda la huella del token, nunca el token.
         fila = conn.execute(
-            'SELECT ultimo_uso FROM sesiones WHERE token = ?', (token,)).fetchone()
+            'SELECT ultimo_uso FROM sesiones WHERE token = ?',
+            (db.hash_token(token),)).fetchone()
         conn.close()
         self.assertIsNotNone(fila)
 
@@ -197,7 +213,7 @@ class TestAutenticacion(TestAPI):
         nuevo = self.login('temp', 'temp1234')['token']
 
         codigo, _ = self.pedir('POST', '/api/password',
-                               {'actual': 'temp1234', 'nueva': 'temp5678'}, token=nuevo)
+                               {'actual': 'temp1234', 'nueva': '4829'}, token=nuevo)
         self.assertEqual(codigo, 200)
 
         # La sesión que hizo el cambio sigue viva; la otra no.
@@ -1714,15 +1730,22 @@ class TestFrenoDeLogin(TestAPI):
         conn.close()
 
     def test_pasado_el_limite_responde_429_y_no_401(self):
-        for _ in range(services.LOGIN_MAX_INTENTOS):
+        for _ in range(services.LOGIN_MAX_INTENTOS - 1):
             codigo, _r = self.pedir("POST", "/api/login",
                                     {"usuario": "admin", "password": "mala"})
             self.assertEqual(codigo, 401)
 
+        # El intento que agota el cupo ya avisa del bloqueo: decir "incorrecto"
+        # a secas lo dejaría enterarse recién en el siguiente.
         codigo, r = self.pedir("POST", "/api/login",
                                {"usuario": "admin", "password": "mala"})
         self.assertEqual(codigo, 429)
         self.assertIn("Demasiados intentos", r["error"])
+
+        # Y bloqueado es bloqueado, aun con la clave correcta.
+        codigo, _ = self.pedir("POST", "/api/login",
+                               {"usuario": "admin", "password": "admin1234"})
+        self.assertEqual(codigo, 429)
 
     def test_el_freno_no_revela_si_el_usuario_existe(self):
         """Un usuario inexistente tiene que verse igual que uno real."""
@@ -1754,3 +1777,202 @@ class TestFrenoDeLogin(TestAPI):
             codigo, _r = self.pedir("POST", "/api/login",
                                     {"usuario": "admin", "password": "mala"})
             self.assertEqual(codigo, 401)
+
+
+class TestUsuariosAPI(TestAPI):
+    """Administración de accesos vista por HTTP, como la va a usar la pantalla."""
+
+    def setUp(self):
+        conn = db.conectar()
+        conn.execute("DELETE FROM intentos_login")
+        conn.commit()
+        conn.close()
+
+    def _crear(self, usuario, rol="auditor", nombre="Persona de Prueba"):
+        codigo, r = self.admin("POST", "/api/usuarios",
+                               {"usuario": usuario, "nombre": nombre, "rol": rol})
+        self.assertEqual(codigo, 200, r)
+        return r
+
+    def test_un_auditor_no_administra_accesos(self):
+        """Lo que protege es el rol de cada ruta, no que la pestaña esté oculta."""
+        rutas = [("GET", "/api/usuarios", None),
+                 ("POST", "/api/usuarios", {"usuario": "x", "nombre": "xx", "rol": "admin"}),
+                 ("PUT", "/api/usuarios/1", {"activo": False}),
+                 ("POST", "/api/usuarios/1/resetear", {}),
+                 ("POST", "/api/usuarios/1/desbloquear", {}),
+                 ("POST", "/api/usuarios/1/cerrar-sesiones", {})]
+        for metodo, camino, cuerpo in rutas:
+            codigo, _ = self.auditor(metodo, camino, cuerpo)
+            self.assertEqual(codigo, 403, f"{metodo} {camino}")
+
+    def test_sin_sesion_tampoco(self):
+        codigo, _ = self.pedir("GET", "/api/usuarios")
+        self.assertEqual(codigo, 401)
+
+    def test_el_listado_no_expone_hashes_ni_tokens(self):
+        codigo, r = self.admin("GET", "/api/usuarios")
+        self.assertEqual(codigo, 200)
+        nombres = {u["usuario"] for u in r["usuarios"]}
+        self.assertTrue({"admin", "jperez"} <= nombres)
+        crudo = json.dumps(r)
+        self.assertNotIn("password_hash", crudo)
+        self.assertNotIn("pbkdf2", crudo)
+
+    def test_un_auditor_nuevo_ingresa_con_el_pin_que_se_le_dio(self):
+        creado = self._crear("pin.uno")
+        self.assertEqual(creado["credencial"], "pin")
+        r = self.login("pin.uno", creado["credencial_temporal"])
+        self.assertIn("token", r)
+        self.assertEqual(r["usuario"]["credencial"], "pin")
+        self.assertEqual(r["usuario"]["rol"], "auditor")
+
+    def test_el_ingreso_no_distingue_mayusculas_del_usuario(self):
+        creado = self._crear("pin.dos")
+        r = self.login("  PIN.Dos ", creado["credencial_temporal"])
+        self.assertIn("token", r)
+
+    def test_la_sesion_informa_el_tipo_de_credencial(self):
+        creado = self._crear("pin.tres")
+        token = self.login("pin.tres", creado["credencial_temporal"])["token"]
+        _, r = self.pedir("GET", "/api/sesion", token=token)
+        self.assertEqual(r["usuario"]["credencial"], "pin")
+
+    def test_la_base_nunca_guarda_el_token_en_claro(self):
+        token = self.login("jperez", "audit1234")["token"]
+        conn = db.conectar()
+        en_claro = conn.execute("SELECT 1 FROM sesiones WHERE token = ?",
+                                (token,)).fetchone()
+        con_hash = conn.execute("SELECT 1 FROM sesiones WHERE token = ?",
+                                (db.hash_token(token),)).fetchone()
+        conn.close()
+        self.assertIsNone(en_claro)
+        self.assertIsNotNone(con_hash)
+
+    def test_el_auditor_cambia_su_pin_y_pasa_al_ingreso_nuevo(self):
+        creado = self._crear("pin.cuatro")
+        token = self.login("pin.cuatro", creado["credencial_temporal"])["token"]
+        codigo, r = self.pedir("POST", "/api/password",
+                               {"actual": creado["credencial_temporal"],
+                                "nueva": "7304"}, token=token)
+        self.assertEqual(codigo, 200)
+        self.assertEqual(r["credencial"], "pin")
+        self.assertIn("token", self.login("pin.cuatro", "7304"))
+
+    def test_no_se_acepta_un_pin_obvio_al_cambiarlo(self):
+        creado = self._crear("pin.cinco")
+        token = self.login("pin.cinco", creado["credencial_temporal"])["token"]
+        for obvio in ("1234", "0000", "1990"):
+            codigo, r = self.pedir("POST", "/api/password",
+                                   {"actual": creado["credencial_temporal"],
+                                    "nueva": obvio}, token=token)
+            self.assertEqual(codigo, 400, obvio)
+            self.assertIn("fácil de adivinar", r["error"])
+
+    def test_un_auditor_con_contrasena_vieja_pasa_a_pin_al_cambiarla(self):
+        conn = db.conectar()
+        conn.execute("INSERT INTO usuarios (usuario, nombre, password_hash, rol) "
+                     "VALUES ('vieja','Vieja',?, 'auditor')",
+                     (db.hash_password("clave-vieja-1"),))
+        conn.commit()
+        conn.close()
+        token = self.login("vieja", "clave-vieja-1")["token"]
+        _, r = self.pedir("GET", "/api/sesion", token=token)
+        self.assertEqual(r["usuario"]["credencial"], "password")
+        codigo, _ = self.pedir("POST", "/api/password",
+                               {"actual": "clave-vieja-1", "nueva": "5821"},
+                               token=token)
+        self.assertEqual(codigo, 200)
+        _, r = self.pedir("GET", "/api/sesion", token=token)
+        self.assertEqual(r["usuario"]["credencial"], "pin")
+
+    def test_cinco_pin_malos_bloquean_y_el_admin_libera(self):
+        creado = self._crear("pin.seis")
+        for _ in range(services.LOGIN_MAX_INTENTOS):
+            self.pedir("POST", "/api/login",
+                       {"usuario": "pin.seis", "password": "9999"})
+        codigo, r = self.pedir("POST", "/api/login",
+                               {"usuario": "pin.seis",
+                                "password": creado["credencial_temporal"]})
+        # Ni con el PIN correcto: bloqueado es bloqueado.
+        self.assertEqual(codigo, 429)
+        self.assertIn("administrador", r["error"])
+
+        codigo, _ = self.admin("POST", f"/api/usuarios/{creado['id']}/desbloquear", {})
+        self.assertEqual(codigo, 200)
+        self.assertIn("token", self.login("pin.seis", creado["credencial_temporal"]))
+
+    def test_el_error_avisa_cuantos_intentos_quedan(self):
+        creado = self._crear("pin.siete")
+        mensajes = []
+        for _ in range(4):
+            _, r = self.pedir("POST", "/api/login",
+                              {"usuario": "pin.siete", "password": "9999"})
+            mensajes.append(r["error"])
+        self.assertNotIn("quedan", mensajes[0])
+        self.assertIn("Te quedan 2 intentos", mensajes[2])
+        self.assertIn("Te queda 1 intento", mensajes[3])
+        self.assertTrue(all(m.startswith("Usuario o contraseña incorrectos.")
+                            for m in mensajes))
+
+    def test_el_fallo_de_un_usuario_real_queda_en_el_log(self):
+        self._crear("pin.ocho")
+        self.pedir("POST", "/api/login", {"usuario": "pin.ocho", "password": "9999"})
+        conn = db.conectar()
+        n = conn.execute(
+            "SELECT COUNT(*) c FROM auditoria_log l JOIN usuarios u "
+            "ON u.id = l.usuario_id WHERE u.usuario = 'pin.ocho' "
+            "AND l.accion = 'LOGIN_FALLIDO'").fetchone()["c"]
+        conn.close()
+        self.assertEqual(n, 1)
+
+    def test_lo_que_se_tipea_en_un_usuario_inexistente_no_queda_en_el_log(self):
+        """Es frecuente escribir la contraseña en el campo de usuario."""
+        secreto = "MiClaveSecreta-77"
+        self.pedir("POST", "/api/login", {"usuario": secreto, "password": "x"})
+        conn = db.conectar()
+        filas = conn.execute("SELECT detalle, entidad FROM auditoria_log").fetchall()
+        conn.close()
+        self.assertFalse(any(secreto.lower() in str(dict(f)).lower() for f in filas))
+
+    def test_resetear_devuelve_un_pin_nuevo_y_cierra_las_sesiones(self):
+        creado = self._crear("pin.nueve")
+        token = self.login("pin.nueve", creado["credencial_temporal"])["token"]
+        codigo, r = self.admin("POST", f"/api/usuarios/{creado['id']}/resetear", {})
+        self.assertEqual(codigo, 200)
+        self.assertRegex(r["credencial_temporal"], r"^\d{4}$")
+        self.assertEqual(self.pedir("GET", "/api/sesion", token=token)[0], 401)
+        self.assertIn("token", self.login("pin.nueve", r["credencial_temporal"]))
+
+    def test_desactivar_expulsa_en_el_acto(self):
+        creado = self._crear("pin.diez")
+        token = self.login("pin.diez", creado["credencial_temporal"])["token"]
+        codigo, _ = self.admin("PUT", f"/api/usuarios/{creado['id']}", {"activo": False})
+        self.assertEqual(codigo, 200)
+        self.assertEqual(self.pedir("GET", "/api/sesion", token=token)[0], 401)
+        codigo, _ = self.pedir("POST", "/api/login",
+                               {"usuario": "pin.diez",
+                                "password": creado["credencial_temporal"]})
+        self.assertEqual(codigo, 401)
+
+    def test_el_admin_no_se_puede_desactivar_a_si_mismo(self):
+        _, r = self.admin("GET", "/api/usuarios")
+        yo = next(u for u in r["usuarios"] if u["usuario"] == "admin")
+        codigo, r = self.admin("PUT", f"/api/usuarios/{yo['id']}", {"activo": False})
+        self.assertEqual(codigo, 403)
+        self.assertIn("vos mismo", r["error"])
+
+    def test_activo_tiene_que_ser_booleano(self):
+        creado = self._crear("pin.once")
+        codigo, _ = self.admin("PUT", f"/api/usuarios/{creado['id']}", {"activo": "no"})
+        self.assertEqual(codigo, 400)
+
+    def test_un_usuario_inexistente_es_404(self):
+        self.assertEqual(self.admin("PUT", "/api/usuarios/99999", {"nombre": "Zz"})[0], 404)
+        self.assertEqual(self.admin("POST", "/api/usuarios/99999/resetear", {})[0], 404)
+
+    def test_no_se_crean_dos_usuarios_iguales(self):
+        self._crear("pin.doce")
+        codigo, _ = self.admin("POST", "/api/usuarios",
+                               {"usuario": "pin.doce", "nombre": "Otra", "rol": "auditor"})
+        self.assertEqual(codigo, 400)

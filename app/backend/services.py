@@ -2260,15 +2260,67 @@ def estacion_actual(conn: sqlite3.Connection, hoy: date | None = None) -> str:
 # ==========================================================================
 
 # Valores por defecto; el admin los puede cambiar desde la configuración.
-# Diez intentos en un cuarto de hora no molestan a nadie que se haya olvidado
-# la contraseña, y cortan de raíz el barrido automático.
-LOGIN_MAX_INTENTOS = 10
+#
+# Son cinco, no diez, porque los auditores ingresan con un PIN de cuatro dígitos:
+# diez mil combinaciones. Cinco intentos en un cuarto de hora no molestan a nadie
+# que se haya olvidado el PIN, y con el escalonado de abajo adivinarlo desde
+# internet lleva más de un año.
+LOGIN_MAX_INTENTOS = 5
 LOGIN_VENTANA_MINUTOS = 15
+
+# Escalones por encima del configurable: (fallos, ventana en minutos).
+#
+# Un solo umbral deja un atajo: quien espera quince minutos puede volver a
+# probar cinco combinaciones, indefinidamente. Cada escalón mira una ventana más
+# larga, así que insistir sale cada vez más caro:
+#
+#     5 fallos en 15 min  -> espera hasta que el más viejo salga de la ventana
+#    10 fallos en 1 hora  -> idem, hasta una hora
+#    20 fallos en 1 día   -> idem, hasta un día, o hasta que el admin lo libere
+#
+# Con el último escalón, probar las 10.000 combinaciones de un PIN lleva 500
+# días. Todo se calcula sobre `intentos_login` y no sobre una columna del
+# usuario a propósito: así un usuario que no existe se frena igual que uno que
+# sí, y el freno no sirve para averiguar quién tiene cuenta.
+LOGIN_ESCALONES = ((10, 60), (20, 24 * 60))
+
+# Cuánto se conservan los fallos: lo que dura el escalón más largo.
+LOGIN_RETENCION_MINUTOS = max(v for _, v in LOGIN_ESCALONES)
+
+# Cuántas veces más holgado es el freno de una IP que el de un usuario.
+#
+# Todas las tablets y la oficina del admin salen a internet por la MISMA IP
+# pública del aeropuerto. Con el mismo umbral para las dos cosas, cinco PIN mal
+# tipeados por una persona bloqueaban el ingreso de todos, incluido el
+# administrador que tiene que desbloquearla: se probó, y el admin con su clave
+# correcta recibía "demasiados intentos" por culpa de otro.
+#
+# La IP existe para cortar el barrido de muchos usuarios desde un mismo origen,
+# no para castigar equivocaciones. Y el ataque que importa —adivinar el PIN de
+# una persona— lo frena el umbral POR USUARIO, que no depende de la IP.
+LOGIN_FACTOR_IP = 6
 
 
 def _limites_login(conn) -> tuple[int, int]:
     return (db.get_config(conn, "login_max_intentos", LOGIN_MAX_INTENTOS),
             db.get_config(conn, "login_ventana_minutos", LOGIN_VENTANA_MINUTOS))
+
+
+def _escalones_login(conn) -> list[tuple[int, int]]:
+    """Todos los escalones vigentes, el configurable primero.
+
+    Los fijos solo cuentan si son más estrictos de lo que el admin dejó
+    configurado: si subió el primero a 30, un escalón de 10 lo contradiría.
+    """
+    maximo, ventana = _limites_login(conn)
+    return [(maximo, ventana)] + [(m, v) for m, v in LOGIN_ESCALONES if m > maximo]
+
+
+def espera_legible(minutos: int) -> str:
+    """'12 minutos', '1 hora', '23 horas': lo que se le muestra a quien espera."""
+    if minutos < 60:
+        return plural(minutos, "minuto")
+    return plural(-(-minutos // 60), "hora")
 
 
 def login_bloqueado(conn: sqlite3.Connection, usuario: str,
@@ -2277,50 +2329,93 @@ def login_bloqueado(conn: sqlite3.Connection, usuario: str,
 
     Se cuentan por separado los fallos del usuario y los de la IP: lo primero
     protege una cuenta concreta de que le prueben contraseñas, lo segundo frena
-    a quien barre muchos usuarios desde el mismo origen.
+    a quien barre muchos usuarios desde el mismo origen. Cada uno se evalúa
+    contra todos los escalones y manda el que obliga a esperar más.
+    """
+    maximo, _ = _limites_login(conn)
+    if maximo <= 0:
+        return None
+
+    escalones = _escalones_login(conn)
+    claves = [f"usuario:{usuario}"] + ([f"ip:{ip}"] if ip else [])
+
+    # Una sola consulta con la ventana más larga, y los escalones se resuelven en
+    # memoria: contra una base remota cada ida y vuelta cuesta más que el
+    # trabajo, y esto está en el camino de todos los logins.
+    marcadores = ",".join("?" for _ in claves)
+    mas_larga = max(v for _, v in escalones)
+    filas = conn.execute(
+        f"SELECT clave, momento FROM intentos_login "
+        f"WHERE clave IN ({marcadores}) AND momento > datetime('now', ?) "
+        f"ORDER BY momento",
+        (*claves, f"-{mas_larga} minutes")).fetchall()
+
+    from datetime import datetime, timedelta
+    ahora = reloj.ahora()
+    por_clave: dict[str, list] = {}
+    for f in filas:
+        try:
+            por_clave.setdefault(f["clave"], []).append(
+                datetime.strptime(f["momento"], reloj.FORMATO_MARCA))
+        except (ValueError, TypeError):
+            continue
+
+    espera = 0
+    for clave, momentos in por_clave.items():
+        for tope, ventana in escalones:
+            if clave.startswith("ip:"):
+                tope *= LOGIN_FACTOR_IP
+            dentro = [m for m in momentos if m > ahora - timedelta(minutes=ventana)]
+            if len(dentro) < tope:
+                continue
+            # Se está bloqueado mientras haya `tope` fallos dentro de la ventana:
+            # hace falta que salgan los más viejos hasta quedar por debajo.
+            sobran = len(dentro) - tope
+            vence = dentro[sobran] + timedelta(minutes=ventana)
+            espera = max(espera, int((vence - ahora).total_seconds() // 60) + 1)
+    return max(1, espera) if espera else None
+
+
+def intentos_restantes(conn, usuario: str, ip: str | None) -> int | None:
+    """Fallos que faltan para el primer bloqueo, o None si el freno está apagado.
+
+    Sirve para avisarle a la persona antes de que se quede sin intentos: con un
+    PIN de cuatro dígitos es fácil equivocarse de tecla, y enterarse recién al
+    bloquearse es peor que enterarse al tercer error. Se calcula igual para un
+    usuario que no existe, así que el aviso no revela quién tiene cuenta.
+
+    Cada clave se mide contra su propio umbral: el del usuario y el de la IP no
+    son el mismo número (ver `LOGIN_FACTOR_IP`).
     """
     maximo, ventana = _limites_login(conn)
     if maximo <= 0:
         return None
-
     claves = [f"usuario:{usuario}"] + ([f"ip:{ip}"] if ip else [])
-
-    # Las dos claves se resuelven en una sola consulta: contra una base remota
-    # cada ida y vuelta cuesta más que el trabajo que hace, y esto está en el
-    # camino de todos los logins.
     marcadores = ",".join("?" for _ in claves)
     filas = conn.execute(
-        f"SELECT clave, COUNT(*) c, MIN(momento) primero FROM intentos_login "
+        f"SELECT clave, COUNT(*) c FROM intentos_login "
         f"WHERE clave IN ({marcadores}) AND momento > datetime('now', ?) "
         f"GROUP BY clave",
         (*claves, f"-{ventana} minutes")).fetchall()
-
-    for fila in filas:
-        if fila["c"] < maximo:
-            continue
-        # Se espera a que el intento más viejo salga de la ventana.
-        from datetime import datetime, timedelta
-        try:
-            vence = (datetime.strptime(fila["primero"], "%Y-%m-%d %H:%M:%S")
-                     + timedelta(minutes=ventana))
-            faltan = int((vence - reloj.ahora()).total_seconds() // 60) + 1
-        except (ValueError, TypeError):
-            faltan = ventana
-        return max(1, faltan)
-    return None
+    # Toda clave cuenta, también la que todavía no falló: sin eso un usuario
+    # nuevo detrás de una IP con errores veía el cupo de la IP en vez del suyo.
+    fallos = {f["clave"]: f["c"] for f in filas}
+    quedan = [maximo * (LOGIN_FACTOR_IP if c.startswith("ip:") else 1) - fallos.get(c, 0)
+              for c in claves]
+    return max(0, min(quedan))
 
 
 def registrar_intento_fallido(conn: sqlite3.Connection, usuario: str,
                               ip: str | None) -> None:
     """Anota el fallo y limpia lo que ya salió de la ventana."""
-    _, ventana = _limites_login(conn)
     conn.execute("INSERT INTO intentos_login (clave) VALUES (?)",
                  (f"usuario:{usuario}",))
     if ip:
         conn.execute("INSERT INTO intentos_login (clave) VALUES (?)", (f"ip:{ip}",))
-    # La tabla no debe crecer sin fin: lo viejo ya no cuenta para nada.
+    # La tabla no debe crecer sin fin: lo viejo ya no cuenta para nada. Se
+    # conserva lo que dura el escalón más largo, no solo la ventana configurada.
     conn.execute("DELETE FROM intentos_login WHERE momento < datetime('now', ?)",
-                 (f"-{max(ventana, 60)} minutes",))
+                 (f"-{LOGIN_RETENCION_MINUTOS} minutes",))
     conn.commit()
 
 

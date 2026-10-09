@@ -1,6 +1,6 @@
 /* Configuración del Aeropuerto (sección 4) — solo rol admin.
  *
- * Cuatro pestañas: Generales, Inventario, Parámetros y Período. Todo lo que se
+ * Cinco pestañas: Generales, Inventario, Parámetros, Período y Usuarios. Todo lo que se
  * carga acá alimenta directamente el motor de cálculo, así que el servidor
  * valida cada valor y esta pantalla muestra el error tal cual lo devuelve, sin
  * reinterpretarlo. */
@@ -8,10 +8,12 @@
 const Config = (() => {
   let pestana = 'general';
 
-  // Las cuatro pestañas, en una sola lista: la pinta la vista y la valida el
-  // ruteo por pestaña (#/config/inventario).
+  // Las pestañas, en una sola lista: la pinta la vista y la valida el ruteo por
+  // pestaña (#/config/inventario). Usuarios va al final: se usa de vez en
+  // cuando, no en cada mes.
   const PESTANAS = [['general', 'Generales'], ['inventario', 'Inventario'],
-                    ['parametros', 'Parámetros'], ['periodo', 'Período']];
+                    ['parametros', 'Parámetros'], ['periodo', 'Período'],
+                    ['usuarios', 'Usuarios']];
   let onboarding = null;
 
   const $ = (sel) => document.querySelector(sel);
@@ -170,6 +172,7 @@ const Config = (() => {
     if (pestana === 'general') await panelGeneral(panel, layout, ir);
     else if (pestana === 'inventario') await panelInventario(panel, layout, ir);
     else if (pestana === 'parametros') await panelParametros(panel, layout, ir);
+    else if (pestana === 'usuarios') await panelUsuarios(panel, layout, ir);
     else await panelPeriodo(panel);
   }
 
@@ -768,6 +771,284 @@ const Config = (() => {
       UI.toast('Confort térmico guardado', 'ok');
       vista(layout, ir);
     } catch (e) { UI.toast(e.message, 'error', 6000); }
+  }
+
+  /* ======================================================== tab Usuarios === */
+
+  /**
+   * Quién puede ingresar y cómo.
+   *
+   * Es la única pantalla donde se crean usuarios: hasta ahora se hacía con un
+   * INSERT en la base, y en producción existía un solo usuario (el admin), así
+   * que todo el mundo habría tenido que compartir esa cuenta. Con una cuenta
+   * compartida el registro de quién hizo cada control no vale nada, y cada
+   * auditor tendría permisos de administrador.
+   *
+   * Nunca se borra a nadie: los controles, desvíos y resoluciones guardan quién
+   * los hizo. Se desactiva, que corta el acceso y conserva el historial.
+   */
+  const ROL_TXT = { admin: 'Administrador', auditor: 'Auditor' };
+
+  const sinTildes = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+  /** "María Pérez" → "mperez": inicial del nombre más el último apellido. */
+  function sugerirUsuario(nombre) {
+    const partes = nombre.trim().split(/\s+/).filter(Boolean);
+    if (!partes.length) return '';
+    if (partes.length === 1) return sinTildes(partes[0]);
+    return sinTildes(partes[0][0] + partes[partes.length - 1]);
+  }
+
+  const espera = (min) => (min < 60 ? `${min} min` : `${Math.ceil(min / 60)} h`);
+
+  async function panelUsuarios(panel, layout, ir) {
+    const { usuarios } = await API.get('/api/usuarios');
+    const yo = API.usuarioActual() || {};
+
+    const fila = (u) => {
+      const etiquetas = [];
+      if (u.usuario === yo.usuario) etiquetas.push(['azul', 'Vos']);
+      if (!u.activo) etiquetas.push(['gris', 'Inactivo']);
+      if (u.bloqueado_min) {
+        etiquetas.push(['rojo', `Bloqueado ${espera(u.bloqueado_min)}`]);
+      }
+      if (u.rol === 'auditor' && u.credencial === 'password') {
+        etiquetas.push(['ambar', 'Con contraseña']);
+      }
+      const ingreso = u.ultimo_ingreso
+        ? `Último ingreso ${UI.fecha(u.ultimo_ingreso)}` : 'Todavía no ingresó';
+      const sesiones = u.sesiones
+        ? ` · ${UI.plural(u.sesiones, 'sesión abierta', 'sesiones abiertas')}` : '';
+      return `<div class="item ${u.activo ? '' : 'inactivo'}">
+        <span class="texto">
+          <span class="nombre-item">${UI.esc(u.nombre)}
+            ${etiquetas.map(([c, t]) =>
+              `<span class="etiqueta ${c}">${UI.esc(t)}</span>`).join('')}
+          </span>
+          <span class="obs">@${UI.esc(u.usuario)} · ${ROL_TXT[u.rol]} · ${ingreso}${sesiones}</span>
+        </span>
+        <button class="btn-mini" data-usuario="${u.id}">Administrar</button>
+      </div>`;
+    };
+
+    panel.innerHTML = `
+      <div class="tarjeta">
+        <h2>Usuarios</h2>
+        <p class="ayuda-panel">
+          Quién puede ingresar y cómo. Los auditores entran tocando su nombre en
+          la tablet y escribiendo un PIN de 4 dígitos; los administradores, con
+          contraseña.
+        </p>
+        <div class="lista-items">${usuarios.map(fila).join('')}</div>
+        <button class="btn btn-bloque" id="nuevo-usuario" style="margin-top:12px">
+          + Agregar usuario
+        </button>
+      </div>`;
+
+    const refrescar = () => vista(layout, ir);
+    $('#nuevo-usuario').onclick = () => hojaNuevoUsuario(refrescar);
+    panel.querySelectorAll('[data-usuario]').forEach((b) => {
+      b.onclick = () => hojaUsuario(
+        usuarios.find((u) => String(u.id) === b.dataset.usuario), yo, refrescar);
+    });
+  }
+
+  /**
+   * Muestra la credencial recién generada. Es la única vez: el servidor guarda
+   * solo el hash, así que si se pierde no hay cómo recuperarla, solo resetearla.
+   */
+  function hojaCredencial(titulo, usuarioTxt, valor, tipo) {
+    const mostrar = tipo === 'pin' ? valor.split('').join(' ') : valor;
+    UI.abrirHoja(`
+      <h3>${UI.esc(titulo)}</h3>
+      <p class="sub">Anotala ahora y pasásela a la persona: no se vuelve a mostrar.
+        Si se pierde, se resetea de nuevo.</p>
+      <div class="credencial-caja">
+        <div class="etq">Usuario</div>
+        <div class="valor">${UI.esc(usuarioTxt)}</div>
+        <div class="etq">${tipo === 'pin' ? 'PIN' : 'Contraseña'}</div>
+        <div class="valor grande" id="cred-valor">${UI.esc(mostrar)}</div>
+      </div>
+      ${tipo === 'pin' ? `<p class="sub">En la tablet, la primera vez: «Ingresar con
+        otro usuario» con este usuario y este PIN. Después alcanza con tocar su
+        nombre.</p>` : ''}
+      <div class="acciones">
+        <button class="btn" data-copiar>Copiar</button>
+        <button class="btn btn-primario" data-listo>Listo, ya la anoté</button>
+      </div>`, (hoja, cerrar) => {
+      hoja.querySelector('[data-listo]').onclick = cerrar;
+      hoja.querySelector('[data-copiar]').onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(valor);
+          UI.toast('Copiado', 'ok', 1500);
+        } catch (e) {
+          UI.toast('No se pudo copiar: anotala a mano', 'error');
+        }
+      };
+    });
+  }
+
+  function hojaNuevoUsuario(refrescar) {
+    UI.abrirHoja(`
+      <h3>Agregar usuario</h3>
+      <p class="sub">El sistema genera la credencial y te la muestra una sola vez.</p>
+      <div class="campo">
+        <label for="nu-nombre">Nombre y apellido</label>
+        <input id="nu-nombre" type="text" autocomplete="off" maxlength="60">
+      </div>
+      <div class="campo">
+        <label for="nu-usuario">Usuario
+          <span class="ayuda">Minúsculas y sin espacios. Es el que se escribe la primera vez.</span></label>
+        <input id="nu-usuario" type="text" autocomplete="off" autocapitalize="none"
+               autocorrect="off" spellcheck="false" maxlength="30">
+      </div>
+      <div class="campo">
+        <label for="nu-rol">Rol</label>
+        <select id="nu-rol">
+          <option value="auditor">Auditor — entra con un PIN de 4 dígitos</option>
+          <option value="admin">Administrador — entra con contraseña</option>
+        </select>
+      </div>
+      <div class="acciones">
+        <button class="btn" data-cancelar>Cancelar</button>
+        <button class="btn btn-primario" data-guardar>Crear</button>
+      </div>`, (hoja, cerrar) => {
+      const nombre = hoja.querySelector('#nu-nombre');
+      const usuarioInp = hoja.querySelector('#nu-usuario');
+      // Se sugiere el usuario mientras se escribe el nombre, hasta que alguien
+      // lo toca a mano: ahí deja de pisarse.
+      let editadoAMano = false;
+      usuarioInp.oninput = () => { editadoAMano = true; };
+      nombre.oninput = () => {
+        if (!editadoAMano) usuarioInp.value = sugerirUsuario(nombre.value);
+      };
+      hoja.querySelector('[data-cancelar]').onclick = cerrar;
+      hoja.querySelector('[data-guardar]').onclick = async () => {
+        let r;
+        try {
+          r = await API.post('/api/usuarios', {
+            nombre: nombre.value.trim(),
+            usuario: usuarioInp.value.trim(),
+            rol: hoja.querySelector('#nu-rol').value,
+          });
+        } catch (e) { return UI.toast(e.message, 'error', 5000); }
+        UI.cerrarParaNavegar();
+        hojaCredencial('Usuario creado', r.usuario, r.credencial_temporal, r.credencial);
+        refrescar();
+      };
+      nombre.focus();
+    });
+  }
+
+  function hojaUsuario(u, yo, refrescar) {
+    const esYo = u.usuario === yo.usuario;
+    UI.abrirHoja(`
+      <h3>${UI.esc(u.nombre)}</h3>
+      <p class="sub">@${UI.esc(u.usuario)} · ${ROL_TXT[u.rol]}${u.activo ? '' : ' · inactivo'}</p>
+      <div class="campo">
+        <label for="eu-nombre">Nombre</label>
+        <input id="eu-nombre" type="text" value="${UI.esc(u.nombre)}" maxlength="60">
+      </div>
+      ${esYo ? '' : `
+      <div class="campo">
+        <label for="eu-rol">Rol</label>
+        <select id="eu-rol">
+          <option value="auditor" ${u.rol === 'auditor' ? 'selected' : ''}>Auditor</option>
+          <option value="admin" ${u.rol === 'admin' ? 'selected' : ''}>Administrador</option>
+        </select>
+        <p class="ayuda-campo" id="eu-rol-aviso" hidden>
+          Cambiar el rol genera una credencial nueva y cierra sus sesiones.
+        </p>
+      </div>`}
+      <button class="btn btn-primario btn-bloque" data-guardar>Guardar cambios</button>
+
+      <h4 class="sub-seccion">Acceso</h4>
+      ${esYo ? `<p class="sub">Tu propio acceso se cambia desde tu cuenta, en el chip
+        de sincronización de arriba. Y no podés desactivarte a vos mismo.</p>` : `
+        <button class="btn btn-bloque" data-accion="resetear">
+          Resetear ${u.rol === 'auditor' ? 'PIN' : 'contraseña'}
+        </button>
+        ${u.bloqueado_min ? `<button class="btn btn-bloque" data-accion="desbloquear"
+            style="margin-top:8px">Desbloquear (esperaría ${espera(u.bloqueado_min)})
+          </button>` : ''}
+        ${u.sesiones ? `<button class="btn btn-bloque" data-accion="cerrar"
+            style="margin-top:8px">Cerrar sesiones abiertas (${u.sesiones})</button>` : ''}
+        <button class="btn btn-bloque ${u.activo ? 'btn-rojo' : ''}"
+                data-accion="${u.activo ? 'desactivar' : 'activar'}"
+                style="margin-top:8px">
+          ${u.activo ? 'Desactivar usuario' : 'Reactivar usuario'}
+        </button>`}
+      <button class="btn btn-bloque" data-cerrar style="margin-top:8px">Cerrar</button>`,
+    (hoja, cerrar) => {
+      hoja.querySelector('[data-cerrar]').onclick = cerrar;
+      const selRol = hoja.querySelector('#eu-rol');
+      if (selRol) {
+        selRol.onchange = () => {
+          hoja.querySelector('#eu-rol-aviso').hidden = selRol.value === u.rol;
+        };
+      }
+
+      const actuar = async (promesa, mensaje) => {
+        try {
+          const r = await promesa;
+          return { ok: true, r, mensaje };
+        } catch (e) {
+          UI.toast(e.message, 'error', 5000);
+          return { ok: false };
+        }
+      };
+      const terminar = (mensaje) => { cerrar(); UI.toast(mensaje, 'ok'); refrescar(); };
+
+      hoja.querySelector('[data-guardar]').onclick = async () => {
+        const cuerpo = { nombre: hoja.querySelector('#eu-nombre').value.trim() };
+        if (selRol && selRol.value !== u.rol) cuerpo.rol = selRol.value;
+        const res = await actuar(API.put(`/api/usuarios/${u.id}`, cuerpo));
+        if (!res.ok) return;
+        if (res.r.credencial_temporal) {
+          UI.cerrarParaNavegar();
+          hojaCredencial('Rol cambiado', u.usuario, res.r.credencial_temporal,
+                         res.r.credencial);
+          refrescar();
+        } else terminar('Cambios guardados');
+      };
+
+      hoja.querySelectorAll('[data-accion]').forEach((b) => {
+        b.onclick = async () => {
+          const a = b.dataset.accion;
+          if (a === 'resetear') {
+            const tipo = u.rol === 'auditor' ? 'PIN' : 'contraseña';
+            const ok = await UI.confirmar(`Resetear ${tipo}`,
+              `Se genera un ${tipo} nuevo para ${u.nombre}, se cierran sus sesiones `
+              + `y el anterior deja de servir.`, 'Resetear', 'btn-rojo');
+            if (!ok) return;
+            const res = await actuar(API.post(`/api/usuarios/${u.id}/resetear`, {}));
+            if (!res.ok) return;
+            UI.cerrarParaNavegar();
+            hojaCredencial(`${tipo[0].toUpperCase()}${tipo.slice(1)} nuevo`, u.usuario,
+                           res.r.credencial_temporal, res.r.credencial);
+            refrescar();
+          } else if (a === 'desbloquear') {
+            const res = await actuar(API.post(`/api/usuarios/${u.id}/desbloquear`, {}));
+            if (res.ok) terminar('Usuario desbloqueado');
+          } else if (a === 'cerrar') {
+            const res = await actuar(API.post(`/api/usuarios/${u.id}/cerrar-sesiones`, {}));
+            if (res.ok) terminar('Sesiones cerradas');
+          } else {
+            const desactivar = a === 'desactivar';
+            if (desactivar) {
+              const ok = await UI.confirmar('Desactivar usuario',
+                `${u.nombre} no va a poder ingresar y se cierran sus sesiones. `
+                + 'Su historial se conserva.', 'Desactivar', 'btn-rojo');
+              if (!ok) return;
+            }
+            const res = await actuar(
+              API.put(`/api/usuarios/${u.id}`, { activo: !desactivar }));
+            if (res.ok) terminar(desactivar ? 'Usuario desactivado' : 'Usuario reactivado');
+          }
+        };
+      });
+    });
   }
 
   /* ========================================================= tab Período === */

@@ -128,56 +128,380 @@ const App = (() => {
 
   /* =========================================================== login === */
 
+  /**
+   * Ingreso pensado para una tablet compartida.
+   *
+   * Lo que más cuesta es tipear el usuario con el teclado en pantalla, y se
+   * repite en cada relevo. Por eso la tablet recuerda quiénes ingresaron en
+   * ella y se entra tocando el nombre: queda solo el PIN, en un teclado
+   * numérico grande y con el botón por encima de donde aparecería el del
+   * sistema.
+   *
+   * La lista de personas vive SOLO en la tablet (localStorage): el servidor no
+   * publica quién tiene cuenta, así que nadie puede averiguarlo desde afuera.
+   * Se guarda nombre, usuario y tipo de credencial; jamás un secreto. Y solo
+   * auditores: la cuenta de administrador no queda a un toque de quien tenga la
+   * tablet en la mano, entra siempre por "Ingresar con otro usuario".
+   *
+   * Se guarda en localStorage y no en IndexedDB a propósito: "Cerrar sesión"
+   * vacía IndexedDB (los datos de la persona anterior no tienen por qué quedar
+   * a la vista del turno siguiente) y la lista tiene que sobrevivir al relevo,
+   * que es justo cuando se usa.
+   */
+  const CLAVE_RECIENTES = 'irj_recientes';
+  const MAX_RECIENTES = 8;
+
+  function leerRecientes() {
+    try {
+      const v = JSON.parse(localStorage.getItem(CLAVE_RECIENTES) || '[]');
+      return Array.isArray(v)
+        ? v.filter((r) => r && typeof r.usuario === 'string' && typeof r.nombre === 'string')
+        : [];
+    } catch (e) { return []; }
+  }
+
+  function guardarRecientes(lista) {
+    try { localStorage.setItem(CLAVE_RECIENTES, JSON.stringify(lista)); }
+    catch (e) { /* modo privado o sin espacio: se pierde la comodidad, no el ingreso */ }
+  }
+
+  function recordarReciente(u) {
+    if (!u || u.rol !== 'auditor') return;
+    const resto = leerRecientes().filter((r) => r.usuario !== u.usuario);
+    guardarRecientes([{ usuario: u.usuario, nombre: u.nombre,
+                        credencial: u.credencial || 'password' }, ...resto]
+      .slice(0, MAX_RECIENTES));
+  }
+
+  const olvidarReciente = (usuarioTxt) =>
+    guardarRecientes(leerRecientes().filter((r) => r.usuario !== usuarioTxt));
+
+  const iniciales = (nombre) => nombre.trim().split(/\s+/).slice(0, 2)
+    .map((p) => p[0] || '').join('').toUpperCase() || '?';
+
+  const PIN_LARGO = 4;
+
+  let alTeclearPin = null;
+  function soltarTecladoPin() {
+    if (alTeclearPin) document.removeEventListener('keydown', alTeclearPin);
+    alTeclearPin = null;
+  }
+
   function vistaLogin() {
+    soltarTecladoPin();
     app().className = '';
-    app().innerHTML = `
-      <div class="login">
-        <div class="marca">
+    const recientes = leerRecientes();
+    if (recientes.length) return loginTarjetas();
+    return loginManual();
+  }
+
+  /** Cabecera común: marca y estado de la red. */
+  function cabeceraLogin() {
+    return `
+      <div class="login-cabecera">
+        <div class="login-marca-mini">
           <div class="splash-logo">IRJ</div>
-          <h1>Controles Operativos</h1>
-          <p class="sub">Aeropuerto Cap. V. A. Almonacid</p>
+          <div>
+            <h1>Controles Operativos</h1>
+            <p class="sub">Aeropuerto Cap. V. A. Almonacid</p>
+          </div>
         </div>
-        <form id="form-login">
-          <div class="campo">
-            <label for="usuario">Usuario</label>
-            <input id="usuario" name="usuario" type="text" autocomplete="username"
-                   autocapitalize="none" autocorrect="off" required autofocus>
+        <span class="login-red ${navigator.onLine ? '' : 'sin'}" id="login-red" role="status">
+          <span class="punto"></span>${navigator.onLine ? 'Con conexión' : 'Sin conexión'}
+        </span>
+      </div>`;
+  }
+
+  // El chip de red se actualiza solo. Un único par de listeners para toda la
+  // vida de la página: cada pantalla de ingreso repinta el chip y estos solo
+  // retocan el que esté a la vista.
+  let redEscuchada = false;
+  function escucharRed() {
+    if (redEscuchada) return;
+    redEscuchada = true;
+    const pintar = () => {
+      const el = document.getElementById('login-red');
+      if (!el) return;
+      el.className = `login-red ${navigator.onLine ? '' : 'sin'}`;
+      el.innerHTML = `<span class="punto"></span>${navigator.onLine
+        ? 'Con conexión' : 'Sin conexión'}`;
+    };
+    window.addEventListener('online', pintar);
+    window.addEventListener('offline', pintar);
+  }
+
+  /**
+   * Intenta ingresar. Si sale bien, deja la app andando; si no, devuelve el
+   * mensaje a mostrar. `tipo` ajusta el texto del error: el servidor dice
+   * "usuario o contraseña" porque no revela cuál falló, pero en la pantalla del
+   * PIN eso confunde.
+   */
+  async function intentarIngreso(usuarioTxt, secreto, tipo) {
+    if (!navigator.onLine) {
+      return 'Sin conexión. Para ingresar la tablet necesita red.';
+    }
+    try {
+      const r = await API.login(usuarioTxt, secreto);
+      usuario = r.usuario;
+      soltarTecladoPin();
+      recordarReciente(r.usuario);
+      await cargarCatalogos();
+      ir('/');
+      enrutar();
+      // Si la sesión anterior venció con trabajo sin subir, se envía ahora.
+      Sync.sesionRenovada();
+      if (r.usuario.rol === 'auditor' && r.usuario.credencial === 'password') {
+        UI.toast('Tu acceso todavía es con contraseña. Podés pasarlo a un PIN de '
+          + `${PIN_LARGO} dígitos desde tu cuenta.`, '', 7000);
+      }
+      return null;
+    } catch (err) {
+      if (err.codigo === 401) {
+        const palabra = tipo === 'pin' ? 'PIN incorrecto'
+          : tipo === 'clave' ? 'Contraseña incorrecta' : null;
+        if (palabra) return err.message.replace(/^Usuario o contraseña incorrectos/, palabra);
+      }
+      return err.message;
+    }
+  }
+
+  /* ---- 1. tarjetas: quién ingresa ---- */
+
+  function loginTarjetas() {
+    soltarTecladoPin();
+    escucharRed();
+    const recientes = leerRecientes();
+    app().innerHTML = `
+      <div class="login login-tablet">
+        ${cabeceraLogin()}
+        <h2 class="login-titulo">¿Quién ingresa?</h2>
+        <div class="login-tarjetas">
+          ${recientes.map((r) => `
+            <div class="login-tarjeta-caja">
+              <button class="login-tarjeta" data-usuario="${UI.esc(r.usuario)}">
+                <span class="avatar-login">${UI.esc(iniciales(r.nombre))}</span>
+                <span class="nombre">${UI.esc(r.nombre)}</span>
+              </button>
+              <button class="login-quitar" data-quitar="${UI.esc(r.usuario)}"
+                      aria-label="Quitar a ${UI.esc(r.nombre)} de esta tablet">×</button>
+            </div>`).join('')}
+        </div>
+        <button class="login-otro" id="login-otro">Ingresar con otro usuario</button>
+      </div>`;
+
+    app().querySelectorAll('[data-usuario]').forEach((b) => {
+      b.onclick = () => {
+        const r = recientes.find((x) => x.usuario === b.dataset.usuario);
+        if (r) r.credencial === 'pin' ? loginPin(r) : loginClave(r);
+      };
+    });
+    app().querySelectorAll('[data-quitar]').forEach((b) => {
+      b.onclick = () => {
+        olvidarReciente(b.dataset.quitar);
+        vistaLogin();
+      };
+    });
+    $('#login-otro').onclick = () => loginManual();
+  }
+
+  /* ---- 2. PIN con teclado numérico ---- */
+
+  function loginPin(persona) {
+    escucharRed();
+    let digitos = '';
+    let ocupado = false;
+
+    app().innerHTML = `
+      <div class="login login-tablet">
+        ${cabeceraLogin()}
+        <div class="login-persona">
+          <span class="avatar-login">${UI.esc(iniciales(persona.nombre))}</span>
+          <div class="texto">
+            <div class="nombre">${UI.esc(persona.nombre)}</div>
+            <div class="sub">Ingresá tu PIN</div>
           </div>
-          <div class="campo">
-            <label for="password">Contraseña</label>
-            <input id="password" name="password" type="password"
-                   autocomplete="current-password" required>
+          <button class="btn" id="login-no-soy">No soy yo</button>
+        </div>
+        <div class="pin-puntos" id="pin-puntos" aria-label="PIN">
+          ${'<span class="pin-punto"></span>'.repeat(PIN_LARGO)}
+        </div>
+        <div id="error-login" role="alert"></div>
+        <div class="teclado">
+          ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) =>
+            `<button class="tecla" data-tecla="${n}">${n}</button>`).join('')}
+          <button class="tecla menor" id="login-usar-clave">Usar contraseña</button>
+          <button class="tecla" data-tecla="0">0</button>
+          <button class="tecla menor" id="pin-borrar" aria-label="Borrar">⌫</button>
+        </div>
+      </div>`;
+
+    const puntos = () => app().querySelectorAll('.pin-punto').forEach((p, i) =>
+      p.classList.toggle('lleno', i < digitos.length));
+
+    async function enviar() {
+      ocupado = true;
+      const msg = await intentarIngreso(persona.usuario, digitos, 'pin');
+      if (msg === null) return;
+      // Falló: se vacía para volver a empezar, y los puntos "tiemblan" para que
+      // se note aun sin leer el mensaje.
+      ocupado = false;
+      digitos = '';
+      puntos();
+      const caja = $('#pin-puntos');
+      if (caja) {
+        caja.classList.remove('error');
+        void caja.offsetWidth;                    // reinicia la animación
+        caja.classList.add('error');
+      }
+      const e = $('#error-login');
+      if (e) e.innerHTML = `<div class="aviso error">${UI.esc(msg)}</div>`;
+    }
+
+    function tocar(d) {
+      if (ocupado || digitos.length >= PIN_LARGO) return;
+      digitos += d;
+      puntos();
+      const e = $('#error-login');
+      if (e) e.innerHTML = '';
+      if (digitos.length === PIN_LARGO) enviar();
+    }
+
+    app().querySelectorAll('[data-tecla]').forEach((b) => {
+      b.onclick = () => tocar(b.dataset.tecla);
+    });
+    $('#pin-borrar').onclick = () => {
+      if (ocupado) return;
+      digitos = digitos.slice(0, -1);
+      puntos();
+    };
+    $('#login-no-soy').onclick = () => vistaLogin();
+    $('#login-usar-clave').onclick = () => loginClave(persona);
+
+    // Teclado físico (una tablet con funda-teclado, o probando en la
+    // computadora). Una sola escucha a la vez: si se saliera de esta pantalla y
+    // se volviera sin teclear nada, quedarían dos y cada dígito contaría doble.
+    soltarTecladoPin();
+    alTeclearPin = (ev) => {
+      if (/^\d$/.test(ev.key)) tocar(ev.key);
+      else if (ev.key === 'Backspace' && !ocupado) {
+        digitos = digitos.slice(0, -1);
+        puntos();
+      }
+    };
+    document.addEventListener('keydown', alTeclearPin);
+  }
+
+  /* ---- 3. contraseña de una persona ya elegida ---- */
+
+  function loginClave(persona) {
+    soltarTecladoPin();
+    escucharRed();
+    app().innerHTML = `
+      <div class="login login-tablet">
+        ${cabeceraLogin()}
+        <div class="login-persona">
+          <span class="avatar-login">${UI.esc(iniciales(persona.nombre))}</span>
+          <div class="texto">
+            <div class="nombre">${UI.esc(persona.nombre)}</div>
+            <div class="sub">Ingresá tu contraseña</div>
           </div>
-          <div id="error-login"></div>
+          <button class="btn" id="login-no-soy">No soy yo</button>
+        </div>
+        <form id="form-login" class="login-form">
+          ${campoClave('password', 'Contraseña', 'current-password')}
+          <div id="error-login" role="alert"></div>
           <button class="btn btn-primario btn-bloque btn-grande" type="submit">
             Ingresar
           </button>
+          ${persona.credencial === 'pin'
+            ? '<button type="button" class="btn-enlace" id="login-usar-pin">Usar PIN</button>'
+            : ''}
         </form>
       </div>`;
+    conectarOjo();
+    $('#password').focus();
+    $('#login-no-soy').onclick = () => vistaLogin();
+    const usarPin = $('#login-usar-pin');
+    if (usarPin) usarPin.onclick = () => loginPin(persona);
+    $('#form-login').onsubmit = (e) =>
+      enviarFormulario(e, () => persona.usuario, 'clave');
+  }
 
-    $('#form-login').onsubmit = async (e) => {
-      e.preventDefault();
-      const boton = e.target.querySelector('button');
-      boton.disabled = true;
-      boton.textContent = 'Ingresando…';
-      try {
-        const r = await API.login($('#usuario').value.trim(), $('#password').value);
-        usuario = r.usuario;
-        await cargarCatalogos();
-        ir('/');
-        enrutar();
-        // Si la sesión anterior venció con trabajo sin subir, se envía ahora.
-        Sync.sesionRenovada();
-      } catch (err) {
-        const mensaje = navigator.onLine
-          ? err.message
-          : 'Sin conexión. El primer ingreso requiere red.';
-        $('#error-login').innerHTML =
-          `<div class="aviso error">${UI.esc(mensaje)}</div>`;
-        boton.disabled = false;
-        boton.textContent = 'Ingresar';
-      }
+  /* ---- 4. usuario y contraseña (primer ingreso, o administrador) ---- */
+
+  function loginManual() {
+    soltarTecladoPin();
+    escucharRed();
+    const hayLista = leerRecientes().length > 0;
+    app().innerHTML = `
+      <div class="login login-tablet">
+        ${cabeceraLogin()}
+        <h2 class="login-titulo">Ingresar</h2>
+        <form id="form-login" class="login-form">
+          <div class="campo">
+            <label for="usuario">Usuario</label>
+            <input id="usuario" name="usuario" type="text" autocomplete="username"
+                   autocapitalize="none" autocorrect="off" spellcheck="false"
+                   required>
+          </div>
+          ${campoClave('password', 'PIN o contraseña', 'current-password')}
+          <div id="error-login" role="alert"></div>
+          <button class="btn btn-primario btn-bloque btn-grande" type="submit">
+            Ingresar
+          </button>
+          ${hayLista
+            ? '<button type="button" class="btn-enlace" id="login-volver">'
+              + '← Volver a la lista</button>'
+            : ''}
+        </form>
+      </div>`;
+    conectarOjo();
+    $('#usuario').focus();
+    const volver = $('#login-volver');
+    if (volver) volver.onclick = () => vistaLogin();
+    $('#form-login').onsubmit = (e) =>
+      enviarFormulario(e, () => $('#usuario').value.trim(), null);
+  }
+
+  /** Campo de contraseña con el ojo para verla: en una tablet se tipea a ciegas. */
+  function campoClave(id, etiqueta, autocompletar) {
+    return `
+      <div class="campo">
+        <label for="${id}">${etiqueta}</label>
+        <div class="campo-clave">
+          <input id="${id}" name="${id}" type="password"
+                 autocomplete="${autocompletar}" autocapitalize="none"
+                 autocorrect="off" spellcheck="false" required>
+          <button type="button" class="ojo" id="ojo" aria-label="Mostrar contraseña"
+                  aria-pressed="false">Ver</button>
+        </div>
+      </div>`;
+  }
+
+  function conectarOjo() {
+    const ojo = $('#ojo');
+    if (!ojo) return;
+    ojo.onclick = () => {
+      const campo = $('#password');
+      const visible = campo.type === 'text';
+      campo.type = visible ? 'password' : 'text';
+      ojo.textContent = visible ? 'Ver' : 'Ocultar';
+      ojo.setAttribute('aria-pressed', String(!visible));
+      ojo.setAttribute('aria-label', visible ? 'Mostrar contraseña' : 'Ocultar contraseña');
     };
+  }
+
+  async function enviarFormulario(e, leerUsuario, tipo) {
+    e.preventDefault();
+    const boton = e.target.querySelector('button[type="submit"]');
+    boton.disabled = true;
+    boton.textContent = 'Ingresando…';
+    const msg = await intentarIngreso(leerUsuario(), $('#password').value, tipo);
+    if (msg === null) return;
+    $('#error-login').innerHTML = `<div class="aviso error">${UI.esc(msg)}</div>`;
+    boton.disabled = false;
+    boton.textContent = 'Ingresar';
+    $('#password').select();
   }
 
   /* ========================================================== layout === */
@@ -467,7 +791,7 @@ const App = (() => {
         </button>
       </div>
       <button class="btn btn-bloque" data-password style="margin-top:12px">
-        Cambiar contraseña
+        ${usuario.rol === 'auditor' ? 'Cambiar PIN' : 'Cambiar contraseña'}
       </button>
       <button class="btn btn-bloque" data-salir style="margin-top:8px">
         Cerrar sesión
@@ -509,21 +833,35 @@ const App = (() => {
    * creyendo que ya cambió cuando todavía no.
    */
   function hojaPassword() {
+    // El auditor ingresa con un PIN y el admin con una contraseña: la hoja pide
+    // lo que corresponde a su rol. Un auditor que todavía entra con una
+    // contraseña vieja ve el campo "actual" sin restricción de largo (es la
+    // vieja) y elige un PIN nuevo, con lo que pasa al ingreso nuevo.
+    const esPin = usuario.rol === 'auditor';
+    const actualEsPin = usuario.credencial === 'pin';
+    const sol = esPin ? 'PIN' : 'contraseña';
     UI.abrirHoja(`
-      <h3>Cambiar contraseña</h3>
-      <p class="sub">Se cierran las sesiones abiertas en otras tablets</p>
+      <h3>Cambiar ${esPin ? 'PIN' : 'contraseña'}</h3>
+      <p class="sub">${esPin
+        ? `${PIN_LARGO} dígitos. Evitá 1234, tu año de nacimiento y la clave de tu tarjeta. `
+          + 'Se cierran las sesiones abiertas en otras tablets'
+        : 'Se cierran las sesiones abiertas en otras tablets'}</p>
       <div class="campo">
-        <label for="pw-actual">Contraseña actual</label>
-        <input type="password" id="pw-actual" autocomplete="current-password">
+        <label for="pw-actual">${esPin ? 'PIN actual' : 'Contraseña actual'}</label>
+        <input type="password" id="pw-actual" autocomplete="current-password"
+               ${esPin && actualEsPin ? `inputmode="numeric" pattern="[0-9]*"
+                 maxlength="${PIN_LARGO}"` : ''}>
       </div>
       <div class="campo">
-        <label for="pw-nueva">Nueva contraseña
-          <span class="ayuda">Mínimo 8 caracteres</span></label>
-        <input type="password" id="pw-nueva" autocomplete="new-password">
+        <label for="pw-nueva">${esPin ? 'PIN nuevo' : 'Nueva contraseña'}
+          ${esPin ? '' : '<span class="ayuda">Mínimo 8 caracteres</span>'}</label>
+        <input type="password" id="pw-nueva" autocomplete="new-password"
+               ${esPin ? `inputmode="numeric" pattern="[0-9]*" maxlength="${PIN_LARGO}"` : ''}>
       </div>
       <div class="campo">
-        <label for="pw-repetir">Repetir la nueva</label>
-        <input type="password" id="pw-repetir" autocomplete="new-password">
+        <label for="pw-repetir">${esPin ? 'Repetir el PIN nuevo' : 'Repetir la nueva'}</label>
+        <input type="password" id="pw-repetir" autocomplete="new-password"
+               ${esPin ? `inputmode="numeric" pattern="[0-9]*" maxlength="${PIN_LARGO}"` : ''}>
       </div>
       <div class="acciones">
         <button class="btn" data-cancelar>Cancelar</button>
@@ -535,27 +873,35 @@ const App = (() => {
         const nueva = hoja.querySelector('#pw-nueva').value;
         const repetir = hoja.querySelector('#pw-repetir').value;
 
-        if (!actual) return UI.toast('Escribí tu contraseña actual', 'error');
-        if (nueva.length < 8) {
+        if (!actual) return UI.toast(`Escribí tu ${sol} actual`, 'error');
+        if (esPin) {
+          if (!new RegExp(`^\\d{${PIN_LARGO}}$`).test(nueva)) {
+            return UI.toast(`El PIN nuevo tiene que ser de ${PIN_LARGO} dígitos`, 'error');
+          }
+        } else if (nueva.length < 8) {
           return UI.toast('La nueva tiene que tener al menos 8 caracteres', 'error');
         }
         // Se compara acá y no en el servidor: el error de tipeo se detecta sin
-        // gastar un viaje, y sobre todo sin dejar puesta una contraseña que el
+        // gastar un viaje, y sobre todo sin dejar puesta una clave que el
         // auditor cree que es otra.
         if (nueva !== repetir) {
-          return UI.toast('Las dos contraseñas nuevas no coinciden', 'error');
+          return UI.toast(esPin ? 'Los dos PIN nuevos no coinciden'
+                                : 'Las dos contraseñas nuevas no coinciden', 'error');
         }
         if (!navigator.onLine) {
-          return UI.toast('Necesitás conexión para cambiar la contraseña', 'error');
+          return UI.toast(`Necesitás conexión para cambiar ${esPin ? 'el PIN' : 'la contraseña'}`,
+                          'error');
         }
 
         try {
-          await API.post('/api/password', { actual, nueva });
+          const r = await API.post('/api/password', { actual, nueva });
+          usuario.credencial = r.credencial || usuario.credencial;
+          recordarReciente(usuario);
         } catch (e) {
           return UI.toast(e.message, 'error');
         }
         UI.cerrarTodas();
-        UI.toast('Contraseña cambiada', 'ok');
+        UI.toast(esPin ? 'PIN cambiado' : 'Contraseña cambiada', 'ok');
       };
     });
   }

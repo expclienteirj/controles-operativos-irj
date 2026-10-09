@@ -16,6 +16,11 @@ CREATE TABLE IF NOT EXISTS usuarios (
     password_hash TEXT NOT NULL,       -- PBKDF2-SHA256, ver auth.py
     rol           TEXT NOT NULL CHECK (rol IN ('auditor', 'admin')),
     activo        INTEGER NOT NULL DEFAULT 1,
+    -- Cómo ingresa: 'pin' (cuatro dígitos, auditores en tablet compartida) o
+    -- 'password' (admin, y auditores anteriores al PIN). Lo decide el rol al
+    -- crear o resetear; sirve para que la pantalla de ingreso sepa si mostrar el
+    -- teclado numérico o el de letras. No es un secreto: el hash va aparte.
+    credencial    TEXT NOT NULL DEFAULT 'password',
     creado_en     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -25,7 +30,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- invalidaría la sesión de todas las tablets y el trabajo encolado quedaría
 -- sin poder subirse hasta que alguien volviera a iniciar sesión a mano.
 CREATE TABLE IF NOT EXISTS sesiones (
-    token      TEXT PRIMARY KEY,
+    token      TEXT PRIMARY KEY,       -- huella SHA-256 del token, no el token
     usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
     creado_en  TEXT NOT NULL DEFAULT (datetime('now')),
     ultimo_uso TEXT NOT NULL DEFAULT (datetime('now'))

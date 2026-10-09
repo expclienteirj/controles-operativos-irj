@@ -26,11 +26,13 @@ CREATE TABLE IF NOT EXISTS usuarios (
     password_hash TEXT NOT NULL,       
     rol           TEXT NOT NULL CHECK (rol IN ('auditor', 'admin')),
     activo        INTEGER NOT NULL DEFAULT 1,
+    -- 'pin' (auditores) o 'password' (admin). No es un secreto: el hash va aparte.
+    credencial    TEXT NOT NULL DEFAULT 'password',
     creado_en     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS sesiones (
-    token      TEXT PRIMARY KEY,
+    token      TEXT PRIMARY KEY,       -- huella SHA-256 del token, no el token
     usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
     creado_en  TEXT NOT NULL DEFAULT (datetime('now')),
     ultimo_uso TEXT NOT NULL DEFAULT (datetime('now'))

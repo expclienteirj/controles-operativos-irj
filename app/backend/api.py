@@ -29,6 +29,7 @@ import fotos
 import informes
 import reloj
 import services
+import usuarios
 import validacion
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -87,9 +88,18 @@ def ruta(metodo: str, patron: str, rol: str = "auditor"):
 
 # ---------------------------------------------------------------- sesión --
 
+def _mensaje_bloqueo(minutos: int) -> str:
+    return (f"Demasiados intentos fallidos. Reintentá en "
+            f"{services.espera_legible(minutos)}, o pedile al administrador "
+            f"que libere tu usuario.")
+
+
 @ruta("POST", r"/api/login", rol="publico")
 def login(ctx):
-    usuario = (ctx["body"].get("usuario") or "").strip()
+    # Minúsculas: el usuario se guarda así, y el freno cuenta los fallos por
+    # nombre. Sin normalizar, "Admin" y "admin" serían dos cuentas para el freno
+    # y quien prueba claves tendría el doble de intentos por cada variante.
+    usuario = (ctx["body"].get("usuario") or "").strip().lower()
     password = ctx["body"].get("password") or ""
     ip = ctx.get("ip")
 
@@ -98,37 +108,59 @@ def login(ctx):
     # el usuario existe, igual que el de credenciales incorrectas.
     faltan = services.login_bloqueado(ctx["conn"], usuario, ip)
     if faltan is not None:
-        raise ErrorAPI(
-            f"Demasiados intentos fallidos. Reintentá en "
-            f"{services.plural(faltan, 'minuto')}.", 429)
+        raise ErrorAPI(_mensaje_bloqueo(faltan), 429)
 
     fila = ctx["conn"].execute(
-        "SELECT id, usuario, nombre, rol, password_hash, activo FROM usuarios "
-        "WHERE usuario = ?", (usuario,)).fetchone()
+        "SELECT id, usuario, nombre, rol, password_hash, activo, credencial "
+        "FROM usuarios WHERE usuario = ?", (usuario,)).fetchone()
 
     # Mensaje genérico y verificación siempre ejecutada: no revelar si el
     # usuario existe ni permitir distinguirlo por tiempo de respuesta.
     hash_ref = fila["password_hash"] if fila else db.hash_password("inexistente")
     if not db.verificar_password(password, hash_ref) or not fila or not fila["activo"]:
         services.registrar_intento_fallido(ctx["conn"], usuario, ip)
-        raise ErrorAPI("Usuario o contraseña incorrectos", 401)
+        bloqueo = services.login_bloqueado(ctx["conn"], usuario, ip)
+        if fila:
+            # Solo se registra el fallo de un usuario que existe: lo que alguien
+            # tipea en el campo de usuario de uno inexistente puede ser, tal
+            # cual, una contraseña, y no tiene por qué quedar en el log.
+            services.registrar_log(ctx["conn"], fila["id"], "LOGIN_FALLIDO",
+                                   "usuarios", fila["id"], {"ip": ip})
+            if bloqueo is not None:
+                services.registrar_log(ctx["conn"], fila["id"], "LOGIN_BLOQUEADO",
+                                       "usuarios", fila["id"], {"ip": ip})
+            ctx["conn"].commit()
+        # El intento que agota los permitidos ya avisa del bloqueo: si dijera
+        # "incorrecto" a secas, la persona se enteraría recién en el siguiente.
+        # Pasa igual para un usuario que no existe, así que no delata nada.
+        if bloqueo is not None:
+            raise ErrorAPI(_mensaje_bloqueo(bloqueo), 429)
+        quedan = services.intentos_restantes(ctx["conn"], usuario, ip)
+        aviso = ""
+        if quedan is not None and 0 < quedan <= 3:
+            aviso = f" Te {'queda' if quedan == 1 else 'quedan'} " \
+                    f"{services.plural(quedan, 'intento')}."
+        raise ErrorAPI("Usuario o contraseña incorrectos." + aviso, 401)
 
     services.limpiar_intentos(ctx["conn"], usuario, ip)
     token = secrets.token_urlsafe(32)
+    # Se guarda la huella, no el token: ver `db.hash_token`.
     ctx["conn"].execute("INSERT INTO sesiones (token, usuario_id) VALUES (?,?)",
-                        (token, fila["id"]))
+                        (db.hash_token(token), fila["id"]))
     ctx["conn"].execute(
         "DELETE FROM sesiones WHERE ultimo_uso < datetime('now', ?)",
         (f"-{SESION_DIAS} days",))
     services.registrar_log(ctx["conn"], fila["id"], "LOGIN")
     ctx["conn"].commit()
     return {"token": token, "usuario": {"id": fila["id"], "usuario": fila["usuario"],
-                                        "nombre": fila["nombre"], "rol": fila["rol"]}}
+                                        "nombre": fila["nombre"], "rol": fila["rol"],
+                                        "credencial": fila["credencial"]}}
 
 
 @ruta("POST", r"/api/logout")
 def logout(ctx):
-    ctx["conn"].execute("DELETE FROM sesiones WHERE token = ?", (ctx["token"],))
+    ctx["conn"].execute("DELETE FROM sesiones WHERE token = ?",
+                        (db.hash_token(ctx["token"]),))
     ctx["conn"].commit()
     return {"ok": True}
 
@@ -142,8 +174,11 @@ def sesion(ctx):
 def cambiar_password(ctx):
     actual = ctx["body"].get("actual") or ""
     nueva = ctx["body"].get("nueva") or ""
-    if len(nueva) < 8:
-        raise ErrorAPI("La nueva contraseña debe tener al menos 8 caracteres")
+    rol = ctx["sesion"]["rol"]
+    # La regla depende del rol: un PIN de cuatro dígitos para el auditor, una
+    # contraseña de ocho caracteres para el admin. Un auditor que todavía entra
+    # con una contraseña vieja la cambia por un PIN y pasa al ingreso nuevo.
+    tipo = usuarios.validar_credencial(rol, nueva)
 
     fila = ctx["conn"].execute(
         "SELECT password_hash FROM usuarios WHERE id = ?",
@@ -151,15 +186,60 @@ def cambiar_password(ctx):
     if not db.verificar_password(actual, fila["password_hash"]):
         raise ErrorAPI("La contraseña actual no es correcta", 401)
 
-    ctx["conn"].execute("UPDATE usuarios SET password_hash = ? WHERE id = ?",
-                        (db.hash_password(nueva), ctx["sesion"]["usuario_id"]))
+    ctx["conn"].execute(
+        "UPDATE usuarios SET password_hash = ?, credencial = ? WHERE id = ?",
+        (db.hash_password(nueva), tipo, ctx["sesion"]["usuario_id"]))
     # Cerrar las demás sesiones del usuario: si cambió la contraseña porque
     # sospecha que alguien la conoce, dejar sesiones vivas anularía el cambio.
     ctx["conn"].execute("DELETE FROM sesiones WHERE usuario_id = ? AND token != ?",
-                        (ctx["sesion"]["usuario_id"], ctx["token"]))
+                        (ctx["sesion"]["usuario_id"], db.hash_token(ctx["token"])))
     services.registrar_log(ctx["conn"], ctx["sesion"]["usuario_id"], "CAMBIO_PASSWORD")
     ctx["conn"].commit()
-    return {"ok": True}
+    return {"ok": True, "credencial": tipo}
+
+
+# ------------------------------------------------------------------ usuarios --
+# Solo el admin. El frontend esconde la pestaña, pero eso es comodidad: lo que
+# impide que un auditor administre accesos es el rol de cada ruta.
+
+@ruta("GET", r"/api/usuarios", rol="admin")
+def listar_usuarios(ctx):
+    return {"usuarios": usuarios.listar(ctx["conn"])}
+
+
+@ruta("POST", r"/api/usuarios", rol="admin")
+def crear_usuario(ctx):
+    b = ctx["body"]
+    return usuarios.crear(ctx["conn"], ctx["sesion"]["usuario_id"],
+                          b.get("usuario"), b.get("nombre"), b.get("rol"))
+
+
+@ruta("PUT", r"/api/usuarios/(\d+)", rol="admin")
+def modificar_usuario(ctx, usuario_id):
+    b = ctx["body"]
+    activo = b.get("activo")
+    if activo is not None and not isinstance(activo, bool):
+        raise ErrorAPI("`activo` tiene que ser verdadero o falso")
+    return usuarios.modificar(ctx["conn"], ctx["sesion"]["usuario_id"],
+                              int(usuario_id), nombre=b.get("nombre"),
+                              rol=b.get("rol"), activo=activo)
+
+
+@ruta("POST", r"/api/usuarios/(\d+)/resetear", rol="admin")
+def resetear_usuario(ctx, usuario_id):
+    return usuarios.resetear(ctx["conn"], ctx["sesion"]["usuario_id"], int(usuario_id))
+
+
+@ruta("POST", r"/api/usuarios/(\d+)/desbloquear", rol="admin")
+def desbloquear_usuario(ctx, usuario_id):
+    return usuarios.desbloquear(ctx["conn"], ctx["sesion"]["usuario_id"],
+                                int(usuario_id))
+
+
+@ruta("POST", r"/api/usuarios/(\d+)/cerrar-sesiones", rol="admin")
+def cerrar_sesiones_usuario(ctx, usuario_id):
+    return usuarios.cerrar_sesiones(ctx["conn"], ctx["sesion"]["usuario_id"],
+                                    int(usuario_id), conservar_token=ctx["token"])
 
 
 # ------------------------------------------------------------------- versión --
@@ -218,6 +298,8 @@ COLUMNAS_DADAS_DE_BAJA = (("periodo_datos", "monto_adjudicado"),)
 COLUMNAS_QUE_DEBEN_EXISTIR = (
     ("periodo_datos", "detalle_hallazgo_documentacion"),
     ("periodo_datos", "detalle_hallazgo_ley_19587"),
+    # Cada pedido autenticado la lee: sin ella ningún ingreso funciona.
+    ("usuarios", "credencial"),
 )
 
 
@@ -280,6 +362,9 @@ def chequeos_estructurales(conn) -> list[str]:
         if not db.migracion_aplicada(conn, db.MIGRACION_HORA_LOCAL):
             problemas.append("migraciones: falta correr migracion-hora-local.sql "
                              "(marcas de tiempo en hora de Argentina)")
+        if not db.migracion_aplicada(conn, db.MIGRACION_SESIONES_CON_HASH):
+            problemas.append("migraciones: falta correr migracion-usuarios.sql "
+                             "(ingreso con PIN y tokens con hash)")
     except Exception:
         pass
     return problemas
@@ -1563,12 +1648,14 @@ class Handler(BaseHTTPRequestHandler):
         if not token:
             return None, None
 
+        huella = db.hash_token(token)
         fila = conn.execute(
-            "SELECT s.token, s.ultimo_uso, u.id usuario_id, u.usuario, u.nombre, u.rol "
+            "SELECT s.token, s.ultimo_uso, u.id usuario_id, u.usuario, u.nombre, "
+            "       u.rol, u.credencial "
             "FROM sesiones s JOIN usuarios u ON u.id = s.usuario_id "
             "WHERE s.token = ? AND u.activo = 1 "
             "AND s.ultimo_uso >= datetime('now', ?)",
-            (token, f"-{SESION_DIAS} days")).fetchone()
+            (huella, f"-{SESION_DIAS} days")).fetchone()
         if not fila:
             return token, None
 
@@ -1579,10 +1666,11 @@ class Handler(BaseHTTPRequestHandler):
         # vencimiento de 30 días es indistinguible.
         if _conviene_refrescar_sesion(fila["ultimo_uso"]):
             conn.execute("UPDATE sesiones SET ultimo_uso = datetime('now') "
-                         "WHERE token = ?", (token,))
+                         "WHERE token = ?", (huella,))
             conn.commit()
         return token, {"usuario_id": fila["usuario_id"], "rol": fila["rol"],
-                       "usuario": fila["usuario"], "nombre": fila["nombre"]}
+                       "usuario": fila["usuario"], "nombre": fila["nombre"],
+                       "credencial": fila["credencial"]}
 
     def _body(self):
         largo = int(self.headers.get("Content-Length") or 0)

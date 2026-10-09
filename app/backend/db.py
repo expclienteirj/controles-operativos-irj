@@ -60,6 +60,18 @@ def hash_password(password: str, salt: str | None = None) -> str:
     return f"pbkdf2${PBKDF2_ITERACIONES}${salt}${dk.hex()}"
 
 
+def hash_token(token: str) -> str:
+    """Lo que se guarda de un token de sesión: su huella, no el token.
+
+    El token viaja en cada pedido y sin esto quedaba en claro en `sesiones`:
+    cualquiera con lectura de la base (el panel de Supabase, un backup) podía
+    usar cualquier sesión vigente. Guardando solo la huella, la base deja de
+    servir para entrar. SHA-256 alcanza y no hace falta un hash lento como el de
+    las contraseñas: el token tiene 256 bits de azar, no hay nada que adivinar.
+    """
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 def verificar_password(password: str, almacenado: str) -> bool:
     try:
         _, iteraciones, salt, esperado = almacenado.split("$")
@@ -261,9 +273,10 @@ def crear_esquema(conn) -> None:
         conn.commit()
         _crear_tablas_pg(conn, pgcompat.sentencias(pgcompat.traducir_esquema(ddl)))
         if era_nueva:
-            conn.execute(
-                "INSERT INTO migraciones_aplicadas (nombre) VALUES (?) "
-                "ON CONFLICT (nombre) DO NOTHING", (MIGRACION_HORA_LOCAL,))
+            for nombre in MIGRACIONES_DE_DATOS:
+                conn.execute(
+                    "INSERT INTO migraciones_aplicadas (nombre) VALUES (?) "
+                    "ON CONFLICT (nombre) DO NOTHING", (nombre,))
         # `migrar()` son recetas de reconstrucción propias de SQLite, para
         # actualizar bases viejas en uso. Una base Postgres se crea con el
         # esquema ya en su forma final, así que no corresponde aplicarlas.
@@ -329,6 +342,10 @@ def _crear_tablas_pg(conn, sentencias: list[str]) -> None:
 # 19 caracteres ('AAAA-MM-DD HH:MM:SS'), para no correr una fecha pura.
 
 MIGRACION_HORA_LOCAL = "marcas_en_hora_local"
+# Los tokens pasaron a guardarse con hash: las sesiones abiertas quedan inválidas
+# (guardaban el token en claro) y cada persona vuelve a ingresar una vez.
+MIGRACION_SESIONES_CON_HASH = "sesiones_con_hash"
+MIGRACIONES_DE_DATOS = (MIGRACION_HORA_LOCAL, MIGRACION_SESIONES_CON_HASH)
 
 COLUMNAS_CON_MARCA = (
     ("usuarios", "creado_en"),
@@ -405,6 +422,58 @@ BEGIN
 {borrar}
 
     INSERT INTO migraciones_aplicadas (nombre) VALUES ('{MIGRACION_HORA_LOCAL}');
+END $$;
+
+COMMIT;
+"""
+
+
+def sql_usuarios_postgres() -> str:
+    """Script de Supabase para el ingreso con PIN y los tokens con hash.
+
+    Hay que correrlo ANTES de publicar el código: el código nuevo lee la
+    columna `credencial` en cada pedido, y sin ella ningún ingreso funcionaría.
+    El código viejo, en cambio, ignora la columna: el orden seguro es este.
+    """
+    return f"""-- Ingreso con PIN y tokens de sesión con hash.
+--
+-- Generado desde app/backend/db.py (`sql_usuarios_postgres`). No editar a mano.
+-- Pegar entero en el SQL Editor de Supabase y ejecutar UNA vez, ANTES de
+-- publicar el código que lo usa.
+--
+-- Es seguro repetirlo: la columna usa IF NOT EXISTS y el resto queda registrado
+-- en `migraciones_aplicadas`.
+--
+-- Efecto visible: se cierran las sesiones abiertas (guardaban el token en
+-- claro) y cada persona vuelve a ingresar una vez.
+
+BEGIN;
+
+ALTER TABLE usuarios
+    ADD COLUMN IF NOT EXISTS credencial TEXT NOT NULL DEFAULT 'password';
+
+CREATE TABLE IF NOT EXISTS migraciones_aplicadas (
+    nombre      TEXT PRIMARY KEY,
+    aplicada_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM migraciones_aplicadas
+               WHERE nombre = '{MIGRACION_SESIONES_CON_HASH}') THEN
+        RAISE NOTICE 'Ya estaba aplicada: no se tocó nada.';
+        RETURN;
+    END IF;
+
+    DELETE FROM sesiones;
+
+    -- El PIN es de cuatro dígitos: el freno pasa de 10 a 5 fallos por cuarto
+    -- de hora. Solo si nadie lo tocó, que es cuando vale el default.
+    UPDATE config SET valor = '5'
+     WHERE clave = 'login_max_intentos' AND valor = '10';
+
+    INSERT INTO migraciones_aplicadas (nombre)
+    VALUES ('{MIGRACION_SESIONES_CON_HASH}');
 END $$;
 
 COMMIT;
@@ -675,6 +744,28 @@ def migrar(conn: sqlite3.Connection) -> list[str]:
         )""")
     if _desplazar_marcas_sqlite(conn):
         aplicadas.append("marcas de tiempo: de UTC a hora de Argentina")
+
+    # Cómo se ingresa cada usuario: con un PIN de cuatro dígitos (auditores, que
+    # entran a diario desde una tablet compartida) o con una contraseña (admin).
+    # Los usuarios que ya existían conservan la suya.
+    # Se mira que la tabla exista: una base muy vieja puede no tenerla todavía.
+    cols_usuarios = columnas("usuarios")
+    if cols_usuarios and "credencial" not in cols_usuarios:
+        conn.execute("ALTER TABLE usuarios "
+                     "ADD COLUMN credencial TEXT NOT NULL DEFAULT 'password'")
+        aplicadas.append("usuarios: alta de credencial")
+
+    if not migracion_aplicada(conn, MIGRACION_SESIONES_CON_HASH):
+        if columna_existe(conn, "sesiones", "token"):
+            conn.execute("DELETE FROM sesiones")
+        # El PIN es de cuatro dígitos: el freno pasa de 10 a 5 fallos por
+        # cuarto de hora. Solo si nadie lo tocó, que es cuando vale el default.
+        if columna_existe(conn, "config", "clave"):
+            conn.execute("UPDATE config SET valor = '5' "
+                         "WHERE clave = 'login_max_intentos' AND valor = '10'")
+        conn.execute("INSERT INTO migraciones_aplicadas (nombre) VALUES (?)",
+                     (MIGRACION_SESIONES_CON_HASH,))
+        aplicadas.append("sesiones: tokens con hash (se cierran las abiertas)")
 
     # La evidencia pasó de un directorio plano a un árbol por período: ver
     # fotos.py. Se hace acá para que una base en uso quede consistente al
