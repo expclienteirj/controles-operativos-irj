@@ -99,6 +99,24 @@ button, .tocable { touch-action: manipulation; user-select: none; }
      la hoja de sincronización, que es donde el auditor va cuando algo falla. */
   min-height: var(--tap);
 }
+/* Mi cuenta: separado del estado de la red a propósito. Antes todo colgaba del
+   chip "Sincronizado" y nadie esperaba encontrar ahí cambiar el PIN o salir. */
+.btn-cuenta {
+  display: inline-flex; align-items: center; gap: 8px; flex: none;
+  min-height: var(--tap); padding: 0 14px 0 6px; border: 0; border-radius: 999px;
+  background: rgba(255,255,255,.15); color: #fff; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600;
+}
+.btn-cuenta:active { background: rgba(255,255,255,.3); }
+.avatar-mini {
+  width: 36px; height: 36px; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #fff; color: var(--azul); font-size: 13px; font-weight: 700;
+}
+@media (max-width: 560px) {
+  .btn-cuenta { padding: 0 6px; }
+  .btn-cuenta .txt { display: none; }
+}
 .chip-sync .punto { width: 9px; height: 9px; border-radius: 50%; background: #7ee2a8; }
 .chip-sync.pendiente .punto { background: #ffd166; }
 .chip-sync.offline .punto { background: #ff8a80; }
@@ -857,7 +875,6 @@ input.invalido { border-color: var(--rojo); background: var(--rojo-fondo); }
   display: grid; gap: 12px;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
-.login-tarjeta-caja { position: relative; }
 .login-tarjeta {
   width: 100%; min-height: 88px; display: flex; align-items: center; gap: 14px;
   padding: 0 16px; text-align: left; font: inherit; font-size: 18px; font-weight: 600;
@@ -871,14 +888,6 @@ input.invalido { border-color: var(--rojo); background: var(--rojo-fondo); }
   display: inline-flex; align-items: center; justify-content: center;
   background: #e3edf8; color: var(--azul); font-weight: 700; font-size: 18px;
 }
-/* El × es chico a propósito: quitar a alguien de la lista es inofensivo (vuelve
-   a entrar una vez con usuario y PIN) pero no tiene que ser lo primero que se toca. */
-.login-quitar {
-  position: absolute; top: 6px; right: 6px; width: 36px; height: 36px;
-  border: 0; border-radius: 50%; background: transparent; color: var(--gris);
-  font-size: 22px; line-height: 1; cursor: pointer;
-}
-.login-quitar:active { background: var(--gris-fondo); }
 .login-otro {
   width: 100%; min-height: 56px; margin-top: 14px; font: inherit; font-size: 16px;
   font-weight: 600; color: var(--azul-claro); background: transparent;

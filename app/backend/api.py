@@ -202,6 +202,24 @@ def cambiar_password(ctx):
 # Solo el admin. El frontend esconde la pestaña, pero eso es comodidad: lo que
 # impide que un auditor administre accesos es el rol de cada ruta.
 
+@ruta("GET", r"/api/equipo")
+def equipo(ctx):
+    """Los auditores activos, para que la tablet arme las tarjetas del ingreso.
+
+    Lo puede pedir cualquiera que ya tenga sesión, no el público: la pantalla de
+    ingreso no publica quién tiene cuenta, así que nadie de afuera puede
+    averiguar los nombres del personal ni apuntarle a una persona. Quien ingresa
+    una vez en una tablet deja ahí las tarjetas de todos sus compañeros.
+
+    Solo auditores y solo lo imprescindible para mostrar la tarjeta: ni
+    administradores, ni hashes, ni cuándo ingresó cada uno.
+    """
+    filas = ctx["conn"].execute(
+        "SELECT usuario, nombre, credencial FROM usuarios "
+        "WHERE rol = 'auditor' AND activo = 1 ORDER BY nombre").fetchall()
+    return {"auditores": [dict(f) for f in filas]}
+
+
 @ruta("GET", r"/api/usuarios", rol="admin")
 def listar_usuarios(ctx):
     return {"usuarios": usuarios.listar(ctx["conn"])}

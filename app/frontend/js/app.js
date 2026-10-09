@@ -49,6 +49,7 @@ const App = (() => {
 
     if (!usuario) return vistaLogin();
     if (!catalogosListos) await cargarCatalogos();
+    traerEquipo();                       // las tarjetas se mantienen al día solas
     enrutar();
   }
 
@@ -138,7 +139,10 @@ const App = (() => {
    * sistema.
    *
    * La lista de personas vive SOLO en la tablet (localStorage): el servidor no
-   * publica quién tiene cuenta, así que nadie puede averiguarlo desde afuera.
+   * la publica en la pantalla de ingreso, así que nadie de afuera puede
+   * averiguar quién tiene cuenta. Se llena sola con `traerEquipo` apenas alguien
+   * ingresa, y la manda el servidor: a quien se da de baja se lo desactiva desde
+   * Usuarios, no se lo quita a mano de cada tablet.
    * Se guarda nombre, usuario y tipo de credencial; jamás un secreto. Y solo
    * auditores: la cuenta de administrador no queda a un toque de quien tenga la
    * tablet en la mano, entra siempre por "Ingresar con otro usuario".
@@ -149,7 +153,7 @@ const App = (() => {
    * que es justo cuando se usa.
    */
   const CLAVE_RECIENTES = 'irj_recientes';
-  const MAX_RECIENTES = 8;
+  const MAX_RECIENTES = 24;
 
   function leerRecientes() {
     try {
@@ -173,8 +177,31 @@ const App = (() => {
       .slice(0, MAX_RECIENTES));
   }
 
-  const olvidarReciente = (usuarioTxt) =>
-    guardarRecientes(leerRecientes().filter((r) => r.usuario !== usuarioTxt));
+  /**
+   * Deja en la tablet las tarjetas de todos los auditores activos.
+   *
+   * Sin esto, cada persona tenía que escribir su usuario una vez por tablet
+   * antes de que su tarjeta apareciera. Ahora basta con que alguien ingrese una
+   * vez —el admin al prepararla, o cualquier auditor— y la lista se baja
+   * completa. La pide a un endpoint con sesión, no a uno público: quien está
+   * frente a la pantalla de ingreso no puede averiguar quién tiene cuenta.
+   *
+   * La lista del servidor manda: alguien dado de baja deja de aparecer. Los que
+   * ya estaban conservan su lugar (el que más se usó, primero) y los nuevos se
+   * agregan por nombre. Sin red no hace nada: queda lo que ya había.
+   */
+  async function traerEquipo() {
+    try {
+      const { auditores } = await API.get('/api/equipo');
+      const lugar = new Map(leerRecientes().map((r, i) => [r.usuario, i]));
+      const lista = auditores
+        .map((a) => ({ usuario: a.usuario, nombre: a.nombre, credencial: a.credencial }))
+        .sort((a, b) => (lugar.has(a.usuario) ? lugar.get(a.usuario) : 1e6)
+                      - (lugar.has(b.usuario) ? lugar.get(b.usuario) : 1e6)
+                      || a.nombre.localeCompare(b.nombre, 'es'));
+      guardarRecientes(lista.slice(0, MAX_RECIENTES));
+    } catch (e) { /* sin red o sin permiso: se conserva la lista que había */ }
+  }
 
   const iniciales = (nombre) => nombre.trim().split(/\s+/).slice(0, 2)
     .map((p) => p[0] || '').join('').toUpperCase() || '?';
@@ -245,6 +272,7 @@ const App = (() => {
       usuario = r.usuario;
       soltarTecladoPin();
       recordarReciente(r.usuario);
+      traerEquipo();                     // en segundo plano: no frena el ingreso
       await cargarCatalogos();
       ir('/');
       enrutar();
@@ -277,14 +305,10 @@ const App = (() => {
         <h2 class="login-titulo">¿Quién ingresa?</h2>
         <div class="login-tarjetas">
           ${recientes.map((r) => `
-            <div class="login-tarjeta-caja">
-              <button class="login-tarjeta" data-usuario="${UI.esc(r.usuario)}">
-                <span class="avatar-login">${UI.esc(iniciales(r.nombre))}</span>
-                <span class="nombre">${UI.esc(r.nombre)}</span>
-              </button>
-              <button class="login-quitar" data-quitar="${UI.esc(r.usuario)}"
-                      aria-label="Quitar a ${UI.esc(r.nombre)} de esta tablet">×</button>
-            </div>`).join('')}
+            <button class="login-tarjeta" data-usuario="${UI.esc(r.usuario)}">
+              <span class="avatar-login">${UI.esc(iniciales(r.nombre))}</span>
+              <span class="nombre">${UI.esc(r.nombre)}</span>
+            </button>`).join('')}
         </div>
         <button class="login-otro" id="login-otro">Ingresar con otro usuario</button>
       </div>`;
@@ -293,12 +317,6 @@ const App = (() => {
       b.onclick = () => {
         const r = recientes.find((x) => x.usuario === b.dataset.usuario);
         if (r) r.credencial === 'pin' ? loginPin(r) : loginClave(r);
-      };
-    });
-    app().querySelectorAll('[data-quitar]').forEach((b) => {
-      b.onclick = () => {
-        olvidarReciente(b.dataset.quitar);
-        vistaLogin();
       };
     });
     $('#login-otro').onclick = () => loginManual();
@@ -531,6 +549,11 @@ const App = (() => {
         <button class="chip-sync" id="chip-sync">
           <span class="punto"></span><span class="txt">…</span>
         </button>
+        <button class="btn-cuenta" id="btn-cuenta"
+                aria-label="Mi cuenta: ${UI.esc(usuario ? usuario.nombre : '')}">
+          <span class="avatar-mini" aria-hidden="true">${UI.esc(usuario ? iniciales(usuario.nombre) : '')}</span>
+          <span class="txt">Mi cuenta</span>
+        </button>
       </header>
       <main class="contenido">${contenido}</main>
       ${volver || inferior
@@ -539,6 +562,7 @@ const App = (() => {
 
     if (volver) $('#btn-volver').onclick = () => ir(volver);
     $('#chip-sync').onclick = hojaSync;
+    $('#btn-cuenta').onclick = hojaCuenta;
     $('#btn-novedades').onclick = hojaNovedades;
     enlazarVolverInferior();
     Sync.estado().then(pintarChipSync);
@@ -764,6 +788,14 @@ const App = (() => {
     chip.querySelector('.txt').textContent = texto;
   }
 
+  /**
+   * Estado de la sincronización, y nada más.
+   *
+   * Antes esta hoja también cambiaba el PIN y cerraba la sesión, y se abría
+   * desde un botón que decía "Sincronizado": nadie iba a buscar ahí su cuenta, ni
+   * esperaba encontrar "Cerrar sesión" detrás de un indicador de estado. Eso
+   * vive ahora en `hojaCuenta`, con un botón que dice lo que es.
+   */
   async function hojaSync() {
     const est = await Sync.estado();
     const detalle = await Sync.detalle();
@@ -789,20 +821,45 @@ const App = (() => {
         <button class="btn btn-primario" data-sync ${est.online ? '' : 'disabled'}>
           Sincronizar ahora
         </button>
-      </div>
-      <button class="btn btn-bloque" data-password style="margin-top:12px">
-        ${usuario.rol === 'auditor' ? 'Cambiar PIN' : 'Cambiar contraseña'}
-      </button>
-      <button class="btn btn-bloque" data-salir style="margin-top:8px">
-        Cerrar sesión
-      </button>`, (hoja, cerrar) => {
+      </div>`, (hoja, cerrar) => {
       hoja.querySelector('[data-cerrar]').onclick = cerrar;
-      hoja.querySelector('[data-password]').onclick = () => hojaPassword();
       hoja.querySelector('[data-sync]').onclick = async () => {
         cerrar();
         await Sync.sincronizar({ silencioso: false });
         enrutar();
       };
+    });
+  }
+
+  /**
+   * Mi cuenta: quién está usando la tablet y qué puede hacer con su acceso.
+   *
+   * "Cerrar sesión" se dice como lo que es para quien comparte la tablet:
+   * cambiar de usuario. Sigue siendo un cierre real, que además borra los datos
+   * locales y las fotos (la tablet es de todos), y por eso avisa si quedó algo
+   * sin sincronizar.
+   */
+  function hojaCuenta() {
+    UI.abrirHoja(`
+      <h3>Mi cuenta</h3>
+      <div class="login-persona" style="margin-bottom:14px">
+        <span class="avatar-login">${UI.esc(iniciales(usuario.nombre))}</span>
+        <div class="texto">
+          <div class="nombre">${UI.esc(usuario.nombre)}</div>
+          <div class="sub">@${UI.esc(usuario.usuario)} ·
+            ${usuario.rol === 'admin' ? 'Administrador' : 'Auditor'}</div>
+        </div>
+      </div>
+      <button class="btn btn-bloque" data-password>
+        ${usuario.rol === 'auditor' ? 'Cambiar PIN' : 'Cambiar contraseña'}
+      </button>
+      <button class="btn btn-bloque" data-salir style="margin-top:8px">
+        Cerrar sesión y cambiar de usuario
+      </button>
+      <button class="btn btn-bloque" data-cerrar style="margin-top:8px">Cerrar</button>`,
+    (hoja, cerrar) => {
+      hoja.querySelector('[data-cerrar]').onclick = cerrar;
+      hoja.querySelector('[data-password]').onclick = () => hojaPassword();
       hoja.querySelector('[data-salir]').onclick = async () => {
         const pend = (await Sync.estado()).pendientes;
         const ok = await UI.confirmar(

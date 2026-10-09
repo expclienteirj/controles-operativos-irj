@@ -1976,3 +1976,46 @@ class TestUsuariosAPI(TestAPI):
         codigo, _ = self.admin("POST", "/api/usuarios",
                                {"usuario": "pin.doce", "nombre": "Otra", "rol": "auditor"})
         self.assertEqual(codigo, 400)
+
+
+class TestEquipoAPI(TestAPI):
+    """Las tarjetas del ingreso salen de acá, y no pueden ser una lista pública."""
+
+    def test_sin_sesion_no_se_ve_quien_tiene_cuenta(self):
+        codigo, r = self.pedir("GET", "/api/equipo")
+        self.assertEqual(codigo, 401)
+        self.assertNotIn("auditores", r)
+
+    def test_un_auditor_ve_a_sus_companeros_y_nada_mas(self):
+        codigo, r = self.auditor("GET", "/api/equipo")
+        self.assertEqual(codigo, 200)
+        usuarios = {a["usuario"] for a in r["auditores"]}
+        self.assertIn("jperez", usuarios)
+        self.assertNotIn("admin", usuarios)
+        for a in r["auditores"]:
+            self.assertEqual(set(a), {"usuario", "nombre", "credencial"})
+        crudo = json.dumps(r)
+        self.assertNotIn("pbkdf2", crudo)
+        self.assertNotIn("password_hash", crudo)
+
+    def test_el_admin_tambien_lo_recibe_para_dejar_las_tarjetas_en_la_tablet(self):
+        codigo, r = self.admin("GET", "/api/equipo")
+        self.assertEqual(codigo, 200)
+        self.assertTrue(r["auditores"])
+
+    def test_un_usuario_desactivado_deja_de_aparecer(self):
+        _, c = self.admin("POST", "/api/usuarios",
+                          {"usuario": "baja.uno", "nombre": "Baja Uno", "rol": "auditor"})
+        self.assertIn("baja.uno", {a["usuario"] for a in
+                                   self.auditor("GET", "/api/equipo")[1]["auditores"]})
+        self.admin("PUT", f"/api/usuarios/{c['id']}", {"activo": False})
+        self.assertNotIn("baja.uno", {a["usuario"] for a in
+                                      self.auditor("GET", "/api/equipo")[1]["auditores"]})
+
+    def test_viene_ordenado_por_nombre(self):
+        self.admin("POST", "/api/usuarios",
+                   {"usuario": "orden.z", "nombre": "Zzz Final", "rol": "auditor"})
+        self.admin("POST", "/api/usuarios",
+                   {"usuario": "orden.a", "nombre": "Aaa Inicio", "rol": "auditor"})
+        nombres = [a["nombre"] for a in self.auditor("GET", "/api/equipo")[1]["auditores"]]
+        self.assertEqual(nombres, sorted(nombres))

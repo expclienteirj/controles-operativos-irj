@@ -964,8 +964,8 @@ const Config = (() => {
       <button class="btn btn-primario btn-bloque" data-guardar>Guardar cambios</button>
 
       <h4 class="sub-seccion">Acceso</h4>
-      ${esYo ? `<p class="sub">Tu propio acceso se cambia desde tu cuenta, en el chip
-        de sincronización de arriba. Y no podés desactivarte a vos mismo.</p>` : `
+      ${esYo ? `<p class="sub">Tu propio acceso se cambia desde «Mi cuenta», arriba a
+        la derecha. Y no podés desactivarte a vos mismo.</p>` : `
         <button class="btn btn-bloque" data-accion="resetear">
           Resetear ${u.rol === 'auditor' ? 'PIN' : 'contraseña'}
         </button>
