@@ -13,6 +13,9 @@ import json
 import os
 import secrets
 import sqlite3
+import threading
+
+import reloj
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("IRJ_DB", os.path.join(BASE_DIR, "data", "irj.db"))
@@ -85,7 +88,49 @@ def conectar(path: str | None = None, url: str | None = None):
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    _registrar_reloj(conn)
     return conn
+
+
+# ==========================================================================
+# Hora local en SQLite
+# ==========================================================================
+#
+# `datetime('now')` de SQLite devuelve UTC, y el esquema lo usa como DEFAULT de
+# 21 columnas. Postgres ya se resuelve con su propia función (ver `pgcompat`);
+# acá se redefine la de SQLite para que las dos bases midan lo mismo.
+#
+# Se redefine la función en la conexión en vez de reescribir los DEFAULT porque
+# el DEFAULT queda grabado en la tabla: cambiarlo en `schema.sql` no alcanza
+# para una base que ya existe, y SQLite no permite modificarlo sin reconstruir
+# la tabla. En cambio la función se resuelve al insertar, así que cubre también
+# a las bases viejas sin tocar ninguna.
+#
+# Solo se intercepta `'now'`. Cualquier otro uso —un modificador, una marca ya
+# formada— se delega al `datetime` original, para no reimplementar la sintaxis
+# de fechas de SQLite y arriesgar un caso que nadie probó.
+
+_trabajo_sqlite = sqlite3.connect(":memory:", check_same_thread=False)
+_candado_sqlite = threading.Lock()
+
+
+def _datetime_local(*args):
+    if not args:
+        return None
+    if args[0] == "now":
+        if len(args) == 1:
+            return reloj.marca()
+        args = (reloj.marca(),) + args[1:]
+    marcadores = ",".join("?" for _ in args)
+    # Una sola conexión auxiliar compartida entre hilos: el candado evita que
+    # dos requests simultáneos del servidor local la usen a la vez.
+    with _candado_sqlite:
+        return _trabajo_sqlite.execute(
+            f"SELECT datetime({marcadores})", args).fetchone()[0]
+
+
+def _registrar_reloj(conn) -> None:
+    conn.create_function("datetime", -1, _datetime_local)
 
 
 # ==========================================================================
@@ -206,10 +251,19 @@ def crear_esquema(conn) -> None:
 
     if _es_postgres(conn):
         import pgcompat
+        # Se mira antes de crear nada: solo una base que arranca vacía puede
+        # darse por migrada. Una que ya tiene datos en UTC necesita el script
+        # de `sql_hora_local_postgres`, y marcarla acá sin corregirla dejaría
+        # las filas viejas desplazadas con la constancia de que no lo están.
+        era_nueva = not columna_existe(conn, "usuarios", "id")
         # Las funciones primero: el esquema las usa en los DEFAULT.
         conn.executescript(pgcompat.FUNCIONES_SQL)
         conn.commit()
         _crear_tablas_pg(conn, pgcompat.sentencias(pgcompat.traducir_esquema(ddl)))
+        if era_nueva:
+            conn.execute(
+                "INSERT INTO migraciones_aplicadas (nombre) VALUES (?) "
+                "ON CONFLICT (nombre) DO NOTHING", (MIGRACION_HORA_LOCAL,))
         # `migrar()` son recetas de reconstrucción propias de SQLite, para
         # actualizar bases viejas en uso. Una base Postgres se crea con el
         # esquema ya en su forma final, así que no corresponde aplicarlas.
@@ -254,6 +308,141 @@ def _crear_tablas_pg(conn, sentencias: list[str]) -> None:
                 f"No se pudo crear el esquema; {len(fallaron)} sentencia(s) "
                 f"sin resolver. Último error: {ultimo_error}")
         pendientes = fallaron
+
+
+# ==========================================================================
+# Marcas de tiempo en hora local: migración de los datos ya guardados
+# ==========================================================================
+#
+# Hasta ahora todo `datetime('now')` guardaba UTC. Al pasar a hora de Argentina
+# las filas ya escritas quedan tres horas adelantadas respecto de las nuevas, y
+# una columna con las dos mezcladas no se puede ordenar ni comparar. Hay que
+# corregirlas una sola vez.
+#
+# "Una sola vez" es la parte delicada: restar tres horas dos veces corrompe
+# los datos sin que nada falle. Por eso la aplicación queda registrada en
+# `migraciones_aplicadas` y el script se niega a repetirse.
+#
+# La lista es la de columnas que el SERVIDOR llena con la hora (DEFAULT o
+# `datetime('now')`). Ninguna recibe valores del cliente: se verificó que todas
+# las filas existentes tienen el formato completo. Aun así solo se tocan las de
+# 19 caracteres ('AAAA-MM-DD HH:MM:SS'), para no correr una fecha pura.
+
+MIGRACION_HORA_LOCAL = "marcas_en_hora_local"
+
+COLUMNAS_CON_MARCA = (
+    ("usuarios", "creado_en"),
+    ("sesiones", "creado_en"),
+    ("sesiones", "ultimo_uso"),
+    ("config", "actualizado"),
+    ("controles_limpieza", "iniciado_en"),
+    ("controles_limpieza", "cerrado_en"),
+    ("control_sectores", "confirmado_en"),
+    ("desvios", "creado_en"),
+    ("equipamiento_faltante", "registrado_en"),
+    ("equipamiento_baja", "registrado_en"),
+    ("artefacto_baja", "registrado_en"),
+    ("no_conformidades", "creado_en"),
+    ("no_conformidades", "resuelto_en"),
+    ("insumo_stock", "relevado_en"),
+    ("relevamientos_los", "fecha"),
+    ("relevamientos_los", "cerrado_en"),
+    ("los_mediciones", "creado_en"),
+    ("fotos", "tomada_en"),
+    ("firmas", "firmado_en"),
+    ("auditoria_log", "fecha"),
+    ("sync_operaciones", "recibido_en"),
+)
+
+# Los intentos de login solo cuentan dentro de una ventana de minutos: lo viejo
+# no sirve para nada y mezclar husos ahí podría dejar a alguien bloqueado de más.
+# Se borran en vez de corregirse.
+TABLAS_EFIMERAS = ("intentos_login",)
+
+
+def sql_hora_local_postgres() -> str:
+    """Script para correr a mano en Supabase. Se genera, no se edita.
+
+    Hace tres cosas en una sola transacción, y por eso en un solo script: cambia
+    la función `datetime()` de la base, corrige las filas viejas y deja
+    constancia. Separadas, una fila escrita entre el cambio de función y la
+    corrección quedaría desplazada dos veces.
+    """
+    import pgcompat
+    desplazar = "\n".join(
+        f"    UPDATE {t} SET {c} = to_char({c}::timestamp - interval '3 hours', "
+        f"'YYYY-MM-DD HH24:MI:SS') WHERE length({c}) = 19;"
+        for t, c in COLUMNAS_CON_MARCA)
+    borrar = "\n".join(f"    DELETE FROM {t};" for t in TABLAS_EFIMERAS)
+    return f"""-- Marcas de tiempo en hora de Argentina (UTC-3).
+--
+-- Generado desde app/backend/db.py (`sql_hora_local_postgres`). No editar a mano.
+-- Pegar entero en el SQL Editor de Supabase y ejecutar UNA vez.
+--
+-- Es seguro repetirlo: si la migración ya quedó registrada, no corrige nada.
+-- Lo que sí hace siempre es reasegurar la función `datetime()`, que es
+-- idempotente.
+
+BEGIN;
+
+{pgcompat.FUNCIONES_SQL.strip()}
+
+CREATE TABLE IF NOT EXISTS migraciones_aplicadas (
+    nombre      TEXT PRIMARY KEY,
+    aplicada_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM migraciones_aplicadas
+               WHERE nombre = '{MIGRACION_HORA_LOCAL}') THEN
+        RAISE NOTICE 'Ya estaba aplicada: no se corrigió ninguna fila.';
+        RETURN;
+    END IF;
+
+{desplazar}
+
+{borrar}
+
+    INSERT INTO migraciones_aplicadas (nombre) VALUES ('{MIGRACION_HORA_LOCAL}');
+END $$;
+
+COMMIT;
+"""
+
+
+def migracion_aplicada(conn, nombre: str) -> bool:
+    """¿Esta migración de datos ya se corrió sobre esta base?
+
+    Si la tabla de constancias no existe todavía devuelve False sin consultarla:
+    en Postgres una consulta fallida aborta la transacción en curso, y este
+    chequeo corre dentro del de salud que no puede tumbar nada.
+    """
+    if not columna_existe(conn, "migraciones_aplicadas", "nombre"):
+        return False
+    return bool(conn.execute(
+        "SELECT 1 FROM migraciones_aplicadas WHERE nombre = ?",
+        (nombre,)).fetchone())
+
+
+def _desplazar_marcas_sqlite(conn) -> bool:
+    """Pasa a hora local las marcas guardadas en UTC. Devuelve si hizo algo."""
+    if migracion_aplicada(conn, MIGRACION_HORA_LOCAL):
+        return False
+    for tabla, columna in COLUMNAS_CON_MARCA:
+        # Una base muy vieja puede no tener todavía la columna: si no existe no
+        # hay nada que corregir, y fallar acá impediría arrancar la app.
+        if not columna_existe(conn, tabla, columna):
+            continue
+        conn.execute(
+            f"UPDATE {tabla} SET {columna} = datetime({columna}, '-3 hours') "
+            f"WHERE length({columna}) = 19")
+    for tabla in TABLAS_EFIMERAS:
+        if columna_existe(conn, tabla, "clave"):
+            conn.execute(f"DELETE FROM {tabla}")
+    conn.execute("INSERT INTO migraciones_aplicadas (nombre) VALUES (?)",
+                 (MIGRACION_HORA_LOCAL,))
+    return True
 
 
 def migrar(conn: sqlite3.Connection) -> list[str]:
@@ -475,6 +664,17 @@ def migrar(conn: sqlite3.Connection) -> list[str]:
 
     if aplicadas:
         conn.commit()
+
+    # Las marcas de tiempo pasan de UTC a hora de Argentina. Va al final para
+    # que las reconstrucciones de arriba, que rellenan con `datetime('now')`
+    # lo que encuentran vacío, no queden corregidas dos veces.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS migraciones_aplicadas (
+            nombre      TEXT PRIMARY KEY,
+            aplicada_en TEXT NOT NULL DEFAULT (datetime('now'))
+        )""")
+    if _desplazar_marcas_sqlite(conn):
+        aplicadas.append("marcas de tiempo: de UTC a hora de Argentina")
 
     # La evidencia pasó de un directorio plano a un árbol por período: ver
     # fotos.py. Se hace acá para que una base en uso quede consistente al

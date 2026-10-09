@@ -27,6 +27,7 @@ import calc
 import db
 import fotos
 import informes
+import reloj
 import services
 import validacion
 
@@ -48,8 +49,9 @@ FRESCURA_SESION = 15 * 60
 def _conviene_refrescar_sesion(ultimo_uso) -> bool:
     """¿Hace falta actualizar `ultimo_uso`, o la marca sigue siendo buena?
 
-    Las marcas se guardan como texto UTC con el formato de `datetime('now')`
-    de SQLite, que es el mismo que produce la función homónima de `pgcompat`.
+    Las marcas se guardan como texto en hora de Argentina con el formato de
+    `datetime('now')`, que es el mismo que produce la función homónima de
+    `pgcompat` (ver `reloj`).
     Ante cualquier valor que no se pueda leer se refresca: perder la marca
     vencería la sesión de un auditor que sí está trabajando.
     """
@@ -58,7 +60,7 @@ def _conviene_refrescar_sesion(ultimo_uso) -> bool:
         marca = _dt.datetime.strptime(str(ultimo_uso)[:19], "%Y-%m-%d %H:%M:%S")
     except (ValueError, TypeError):
         return True
-    ahora = _dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None)
+    ahora = reloj.ahora()
     return (ahora - marca).total_seconds() >= FRESCURA_SESION
 
 
@@ -271,6 +273,13 @@ def chequeos_estructurales(conn) -> list[str]:
         for tabla, columna in COLUMNAS_QUE_DEBEN_EXISTIR:
             if not db.columna_existe(conn, tabla, columna):
                 problemas.append(f"{tabla}.{columna}: falta en la base")
+        # Una base con las marcas a medio convertir mezcla UTC y hora local en la
+        # misma columna: no rompe nada y ordena mal en silencio. En Postgres la
+        # corrección se corre a mano (`migracion-hora-local.sql`), así que acá
+        # se avisa si todavía no se hizo.
+        if not db.migracion_aplicada(conn, db.MIGRACION_HORA_LOCAL):
+            problemas.append("migraciones: falta correr migracion-hora-local.sql "
+                             "(marcas de tiempo en hora de Argentina)")
     except Exception:
         pass
     return problemas
@@ -674,7 +683,7 @@ def crear_control(ctx):
     """Abre el control de un día. Por defecto, el de hoy."""
     import datetime as _dt
 
-    fecha = ctx["body"].get("fecha") or _dt.date.today().isoformat()
+    fecha = ctx["body"].get("fecha") or reloj.hoy().isoformat()
     turno = (ctx["body"].get("turno") or "MANANA").upper()
     try:
         _dt.date.fromisoformat(fecha)
@@ -690,7 +699,7 @@ def crear_control(ctx):
     # existe otra vía de alta de controles_limpieza que esta. Es la garantía
     # de justicia con el prestador: el registro se toma en el momento o no
     # se toma.
-    hoy = _dt.date.today().isoformat()
+    hoy = reloj.hoy().isoformat()
     if fecha > hoy:
         raise ErrorAPI("No se puede abrir el control de una fecha futura")
     if fecha < hoy:
@@ -815,7 +824,7 @@ def editar_baja_equipo(ctx, baja_id):
         ctx["conn"], int(baja_id), ctx["sesion"]["usuario_id"],
         desde=b.get("desde"),
         hasta=b.get("hasta") if corrige else (b.get("hasta")
-                                              or _dt.date.today().isoformat()),
+                                              or reloj.hoy().isoformat()),
         motivo=b.get("motivo"), reabrir=bool(b.get("reabrir")))
 
 
@@ -887,7 +896,7 @@ def editar_baja_artefacto(ctx, baja_id):
         ctx["conn"], int(baja_id), ctx["sesion"]["usuario_id"],
         desde=b.get("desde"),
         hasta=b.get("hasta") if corrige else (b.get("hasta")
-                                              or _dt.date.today().isoformat()),
+                                              or reloj.hoy().isoformat()),
         cantidad=b.get("cantidad"), motivo=b.get("motivo"),
         reabrir=bool(b.get("reabrir")))
 
@@ -1117,7 +1126,7 @@ def get_novedades(ctx):
 
     fecha = ctx["query"].get("fecha", [None])[0]
     try:
-        hoy = _dt.date.fromisoformat(fecha) if fecha else _dt.date.today()
+        hoy = _dt.date.fromisoformat(fecha) if fecha else reloj.hoy()
     except ValueError:
         raise ErrorAPI("Fecha inválida: se espera AAAA-MM-DD")
     return services.novedades(ctx["conn"], hoy,
@@ -1132,7 +1141,7 @@ def nc_pendientes(ctx):
     """
     import datetime as _dt
 
-    fecha = ctx["query"].get("fecha", [_dt.date.today().isoformat()])[0]
+    fecha = ctx["query"].get("fecha", [reloj.hoy().isoformat()])[0]
     try:
         _dt.date.fromisoformat(fecha)
     except ValueError:
@@ -1433,7 +1442,7 @@ def _emisor(ctx) -> dict:
     import datetime as _dt
     s = ctx["sesion"]
     return {"nombre": s["nombre"], "usuario": s["usuario"],
-            "emitido": _dt.datetime.now().strftime("%d/%m/%Y %H:%M")}
+            "emitido": reloj.ahora().strftime("%d/%m/%Y %H:%M")}
 
 
 @ruta("GET", r"/api/periodos/([\d-]+)/informe/limpieza")

@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import api  # noqa: E402
 import db  # noqa: E402
+import reloj  # noqa: E402
 import services  # noqa: E402
 import basedeprueba  # noqa: E402
 
@@ -99,16 +100,16 @@ class TestConsultasPorControl(unittest.TestCase):
 class TestFrescuraDeSesion(unittest.TestCase):
     """`ultimo_uso` marca actividad para vencer a los 30 días, no cada request."""
 
+    # Las marcas de sesión son hora de Argentina (ver `reloj`): una marca armada
+    # con otro reloj parecería tres horas vieja o tres horas futura, y la prueba
+    # pasaría o fallaría por el huso y no por la frescura.
+
     def test_una_marca_recien_puesta_no_se_reescribe(self):
-        import datetime as dt
-        ahora = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
-        self.assertFalse(api._conviene_refrescar_sesion(
-            ahora.strftime("%Y-%m-%d %H:%M:%S")))
+        self.assertFalse(api._conviene_refrescar_sesion(reloj.marca()))
 
     def test_una_marca_vieja_se_refresca(self):
         import datetime as dt
-        vieja = (dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
-                 - dt.timedelta(seconds=api.FRESCURA_SESION + 60))
+        vieja = reloj.ahora() - dt.timedelta(seconds=api.FRESCURA_SESION + 60)
         self.assertTrue(api._conviene_refrescar_sesion(
             vieja.strftime("%Y-%m-%d %H:%M:%S")))
 

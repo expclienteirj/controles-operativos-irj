@@ -18,6 +18,7 @@ from datetime import date, timedelta
 
 import calc
 import db
+import reloj
 
 
 # ==========================================================================
@@ -247,7 +248,7 @@ def _rango_medible(periodo: str, hoy: date | None = None) -> tuple[date, date]:
     como "disponibles" infla la disponibilidad del contratista a principios de
     mes y la corrige recién al cerrar.
     """
-    hoy = hoy or date.today()
+    hoy = hoy or reloj.hoy()
     anio, mes = int(periodo[:4]), int(periodo[5:7])
     primero = date(anio, mes, 1)
     ultimo = date(anio, mes, calendar.monthrange(anio, mes)[1])
@@ -827,7 +828,7 @@ def control_del_dia(conn: sqlite3.Connection, hoy: date | None = None) -> dict:
 
     Es la pantalla de entrada del auditor: abre la app y ve el control de hoy.
     """
-    hoy = hoy or date.today()
+    hoy = hoy or reloj.hoy()
     fecha = hoy.isoformat()
     periodo = fecha[:7]
 
@@ -891,7 +892,7 @@ def estado_modulos(conn: sqlite3.Connection, hoy: date | None = None,
     solo el admin puede cargar, pero el auditor tiene que poder ver que faltan:
     o se lo avisa, o lo ve reflejado en el resultado del mes.
     """
-    hoy = hoy or date.today()
+    hoy = hoy or reloj.hoy()
     periodo = hoy.strftime("%Y-%m")
 
     dia_inicio = db.get_config(conn, "liquidacion_dia_inicio",
@@ -1088,7 +1089,7 @@ def completitud_periodo(conn: sqlite3.Connection, periodo: str,
     incumplimiento del plan de auditoría. Sin esa distinción la app mostraría
     alarma todos los días del mes por los días que aún no llegaron.
     """
-    hoy = hoy or date.today()
+    hoy = hoy or reloj.hoy()
 
     filas = [dict(f) for f in conn.execute(
         "SELECT fecha, turno, id, estado FROM controles_limpieza WHERE periodo = ?",
@@ -1874,7 +1875,7 @@ def guardar_medicion_los(conn: sqlite3.Connection, relevamiento_id: int,
         # Se asume hoy solo si hoy cae dentro del período relevado. Al cargar
         # un mes anterior, adivinar la fecha escribiría el relevamiento en un
         # día que el auditor no recorrió: ahí se exige que la indique.
-        hoy = date.today().isoformat()
+        hoy = reloj.hoy().isoformat()
         if not fecha:
             if hoy[:7] != fila["periodo"]:
                 raise ValueError(
@@ -2115,7 +2116,7 @@ def dashboard_los(conn: sqlite3.Connection, periodo: str,
 
     pendientes = {p["item"] for p in db.inventario_pendiente(conn)}
 
-    fecha_hoy = (hoy or date.today()).isoformat()
+    fecha_hoy = (hoy or reloj.hoy()).isoformat()
 
     items, diario = [], {}
     for f in conn.execute("SELECT clave, nombre, aplica, periodicidad "
@@ -2239,12 +2240,12 @@ def estado_onboarding(conn: sqlite3.Connection) -> dict:
 
 
 def periodo_actual() -> str:
-    return date.today().strftime("%Y-%m")
+    return reloj.hoy().strftime("%Y-%m")
 
 
 def estacion_actual(conn: sqlite3.Connection, hoy: date | None = None) -> str:
     """Estación según las fechas de cambio configuradas (hemisferio sur)."""
-    hoy = hoy or date.today()
+    hoy = hoy or reloj.hoy()
     inicio_verano = db.get_config(conn, "inicio_verano", "10-01")
     inicio_invierno = db.get_config(conn, "inicio_invierno", "04-01")
     mmdd = hoy.strftime("%m-%d")
@@ -2302,7 +2303,7 @@ def login_bloqueado(conn: sqlite3.Connection, usuario: str,
         try:
             vence = (datetime.strptime(fila["primero"], "%Y-%m-%d %H:%M:%S")
                      + timedelta(minutes=ventana))
-            faltan = int((vence - datetime.utcnow()).total_seconds() // 60) + 1
+            faltan = int((vence - reloj.ahora()).total_seconds() // 60) + 1
         except (ValueError, TypeError):
             faltan = ventana
         return max(1, faltan)
@@ -2398,7 +2399,7 @@ def novedades(conn: sqlite3.Connection, hoy: date | None = None,
     ofrecía un "Ir" idéntico para las nueve: la mitad terminaba en un listado
     donde el caso concreto no aparecía por ningún lado.
     """
-    hoy = hoy or date.today()
+    hoy = hoy or reloj.hoy()
     periodo = hoy.strftime("%Y-%m")
     lista = []
 

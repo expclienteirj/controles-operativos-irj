@@ -28,7 +28,8 @@ import re
 import secrets
 import sqlite3
 import unicodedata
-from datetime import datetime
+
+import reloj
 
 MAX_FOTO = 8 * 1024 * 1024
 EXTENSIONES = {"jpeg": ".jpg", "jpg": ".jpg", "png": ".png", "webp": ".webp"}
@@ -75,7 +76,7 @@ def ruta_relativa(contexto: dict, ext: str) -> str:
     Todo es opcional; lo que falte se reemplaza por un tramo neutro para que
     ninguna foto quede fuera del árbol.
     """
-    ahora = datetime.now()
+    ahora = reloj.ahora()
     fecha = contexto.get("fecha") or ahora.strftime("%Y-%m-%d")
     periodo = contexto.get("periodo") or fecha[:7]
     modulo = contexto.get("modulo") or "otros"

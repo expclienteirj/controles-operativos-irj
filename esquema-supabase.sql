@@ -6,7 +6,7 @@
 CREATE OR REPLACE FUNCTION datetime(momento text)
 RETURNS text LANGUAGE sql STABLE AS $$
     SELECT to_char(
-        CASE WHEN momento = 'now' THEN (now() AT TIME ZONE 'UTC')
+        CASE WHEN momento = 'now' THEN (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')
              ELSE momento::timestamp END,
         'YYYY-MM-DD HH24:MI:SS')
 $$;
@@ -14,7 +14,7 @@ $$;
 CREATE OR REPLACE FUNCTION datetime(momento text, modificador text)
 RETURNS text LANGUAGE sql STABLE AS $$
     SELECT to_char(
-        (CASE WHEN momento = 'now' THEN (now() AT TIME ZONE 'UTC')
+        (CASE WHEN momento = 'now' THEN (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')
               ELSE momento::timestamp END) + modificador::interval,
         'YYYY-MM-DD HH24:MI:SS')
 $$;
@@ -373,3 +373,11 @@ CREATE TABLE IF NOT EXISTS artefacto_baja (
 
 CREATE INDEX IF NOT EXISTS idx_artefacto_baja   ON artefacto_baja(nucleo_id, desde);
 
+-- Constancia de las migraciones de DATOS que ya se corrieron. Existe porque hay
+-- correcciones que no se pueden repetir sin dañar la base: pasar las marcas de
+-- tiempo de UTC a hora de Argentina resta tres horas, y restarlas dos veces
+-- corrompe todo sin que nada falle. Ver `db.COLUMNAS_CON_MARCA`.
+CREATE TABLE IF NOT EXISTS migraciones_aplicadas (
+    nombre      TEXT PRIMARY KEY,
+    aplicada_en TEXT NOT NULL DEFAULT (datetime('now'))
+);

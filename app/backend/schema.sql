@@ -442,3 +442,12 @@ CREATE INDEX IF NOT EXISTS idx_fotos_entidad    ON fotos(entidad, entidad_id);
 CREATE INDEX IF NOT EXISTS idx_elev_periodo     ON elevacion_eventos(periodo);
 CREATE INDEX IF NOT EXISTS idx_equip_baja       ON equipamiento_baja(equipamiento_id, desde);
 CREATE INDEX IF NOT EXISTS idx_artefacto_baja   ON artefacto_baja(nucleo_id, desde);
+
+-- Constancia de las migraciones de DATOS que ya se corrieron. Existe porque hay
+-- correcciones que no se pueden repetir sin dañar la base: pasar las marcas de
+-- tiempo de UTC a hora de Argentina resta tres horas, y restarlas dos veces
+-- corrompe todo sin que nada falle. Ver `db.COLUMNAS_CON_MARCA`.
+CREATE TABLE IF NOT EXISTS migraciones_aplicadas (
+    nombre      TEXT PRIMARY KEY,
+    aplicada_en TEXT NOT NULL DEFAULT (datetime('now'))
+);

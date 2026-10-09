@@ -19,6 +19,7 @@ os.environ["IRJ_DB"] = os.path.join(TMP, "test.db")
 
 import api  # noqa: E402
 import db   # noqa: E402
+import reloj  # noqa: E402
 import services  # noqa: E402
 import basedeprueba  # noqa: E402
 
@@ -29,7 +30,7 @@ PIXEL_PNG = ("data:image/png;base64,"
              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmM"
              "IQAAAABJRU5ErkJggg==")
 
-HOY = datetime.date.today().isoformat()
+HOY = reloj.hoy().isoformat()
 
 
 def _control_directo(fecha, turno="MANANA"):
@@ -289,7 +290,7 @@ class TestFlujoLimpieza(TestAPI):
 
     def test_control_de_hoy(self):
         import datetime
-        hoy = datetime.date.today().isoformat()
+        hoy = reloj.hoy().isoformat()
         codigo, r = self.auditor("GET", "/api/controles/hoy")
         self.assertEqual(codigo, 200)
         self.assertEqual(r["fecha"], hoy)

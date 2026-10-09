@@ -25,21 +25,30 @@ from __future__ import annotations
 
 import re
 
-# Formato exacto de `datetime('now')` en SQLite: 'AAAA-MM-DD HH:MM:SS' en UTC.
+import reloj
+
+# Formato de `datetime('now')` en SQLite: 'AAAA-MM-DD HH:MM:SS'. En esta app 'now'
+# es hora de Argentina, no UTC: ver `reloj`.
 FORMATO_SQLITE = "YYYY-MM-DD HH24:MI:SS"
 
 # `datetime()` no existe en Postgres y el SQL de la app la da por sentada.
+#
+# 'now' es la hora de Argentina, igual que en SQLite (ver `db._datetime_local`):
+# las marcas son texto y se comparan como cadenas, así que las dos bases tienen
+# que medir con el mismo reloj.
 #
 # La versión de un argumento acepta 'now' o una marca ya formada. La de dos
 # aplica un modificador estilo SQLite ('-30 days'), que es como la app calcula
 # el vencimiento de las sesiones. No se define `date()`: ese nombre colisiona
 # con el tipo homónimo de Postgres, y su único uso en SQL está dentro de
 # `migrar()`, que solo corre sobre SQLite.
+ZONA = reloj.ZONA_POSTGRES
+
 FUNCIONES_SQL = f"""
 CREATE OR REPLACE FUNCTION datetime(momento text)
 RETURNS text LANGUAGE sql STABLE AS $$
     SELECT to_char(
-        CASE WHEN momento = 'now' THEN (now() AT TIME ZONE 'UTC')
+        CASE WHEN momento = 'now' THEN (now() AT TIME ZONE '{ZONA}')
              ELSE momento::timestamp END,
         '{FORMATO_SQLITE}')
 $$;
@@ -47,7 +56,7 @@ $$;
 CREATE OR REPLACE FUNCTION datetime(momento text, modificador text)
 RETURNS text LANGUAGE sql STABLE AS $$
     SELECT to_char(
-        (CASE WHEN momento = 'now' THEN (now() AT TIME ZONE 'UTC')
+        (CASE WHEN momento = 'now' THEN (now() AT TIME ZONE '{ZONA}')
               ELSE momento::timestamp END) + modificador::interval,
         '{FORMATO_SQLITE}')
 $$;
