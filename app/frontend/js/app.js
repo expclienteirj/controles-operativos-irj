@@ -272,7 +272,7 @@ const App = (() => {
     escucharRed();
     const recientes = leerRecientes();
     app().innerHTML = `
-      <div class="login login-tablet">
+      <div class="login login-tablet sin-teclado">
         ${cabeceraLogin()}
         <h2 class="login-titulo">¿Quién ingresa?</h2>
         <div class="login-tarjetas">
@@ -312,7 +312,7 @@ const App = (() => {
     let ocupado = false;
 
     app().innerHTML = `
-      <div class="login login-tablet">
+      <div class="login login-tablet sin-teclado">
         ${cabeceraLogin()}
         <div class="login-persona">
           <span class="avatar-login">${UI.esc(iniciales(persona.nombre))}</span>

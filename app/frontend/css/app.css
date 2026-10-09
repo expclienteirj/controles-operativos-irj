@@ -821,30 +821,41 @@ input.invalido { border-color: var(--rojo); background: var(--rojo-fondo); }
 /* Pensado para tocar, no para tipear: tarjetas y teclas de 72 px, el formulario
    arriba (para que el teclado del sistema no tape el botón) y el estado de la
    red a la vista, porque sin red no se puede ingresar. */
-.login.login-tablet { max-width: 720px; padding: 24px 20px 32px; }
+.login.login-tablet { max-width: 560px; padding: 36px 20px 40px; }
+/* Las pantallas que no abren el teclado del sistema (tarjetas y PIN) se centran
+   también en vertical: arriba de todo dejaban el 70% de la tablet vacía. Las que
+   sí lo abren (usuario y contraseña) quedan arriba a propósito, para que el
+   botón "Ingresar" no quede tapado. */
+.login-tablet.sin-teclado {
+  box-sizing: border-box; min-height: 100vh; min-height: 100dvh;
+  display: flex; flex-direction: column; justify-content: center;
+}
+/* Todo el ingreso es una sola columna centrada: marca arriba, estado de la red
+   debajo y el resto alineado al mismo eje. Cuando la cabecera iba a la izquierda
+   y el formulario a su lado, en una tablet quedaba todo corrido hacia un costado. */
 .login-cabecera {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; margin-bottom: 28px;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 14px; margin-bottom: 30px; text-align: center;
 }
-.login-marca-mini { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.login-marca-mini { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .login-marca-mini .splash-logo {
-  margin: 0; flex: none; width: 52px; height: 52px; font-size: 18px; border-radius: 14px;
+  margin: 0; width: 68px; height: 68px; font-size: 22px; border-radius: 18px;
 }
-.login-marca-mini h1 { font-size: 18px; margin: 0; }
-.login-marca-mini .sub { font-size: 13px; margin: 2px 0 0; }
+.login-marca-mini h1 { font-size: 22px; margin: 0; }
+.login-marca-mini .sub { font-size: 14px; margin: 4px 0 0; }
 .login-red {
-  display: inline-flex; align-items: center; gap: 8px; flex: none;
+  display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 14px; border-radius: 20px; font-size: 14px; font-weight: 600;
   background: var(--verde-fondo); color: var(--verde);
 }
 .login-red .punto { width: 9px; height: 9px; border-radius: 50%; background: var(--verde); }
 .login-red.sin { background: var(--rojo-fondo); color: var(--rojo); }
 .login-red.sin .punto { background: var(--rojo); }
-.login-titulo { font-size: 22px; margin: 0 0 14px; }
+.login-titulo { font-size: 22px; margin: 0 0 16px; text-align: center; }
 
 .login-tarjetas {
   display: grid; gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 .login-tarjeta-caja { position: relative; }
 .login-tarjeta {
@@ -876,6 +887,8 @@ input.invalido { border-color: var(--rojo); background: var(--rojo-fondo); }
 
 .login-persona {
   display: flex; align-items: center; gap: 14px; margin-bottom: 8px;
+  padding: 12px 14px; background: var(--blanco); border: 2px solid var(--borde);
+  border-radius: var(--radio);
 }
 .login-persona .texto { flex: 1; min-width: 0; }
 .login-persona .nombre { font-size: 20px; font-weight: 600; }
@@ -909,7 +922,7 @@ input.invalido { border-color: var(--rojo); background: var(--rojo-fondo); }
 .tecla:active { background: var(--gris-fondo); transform: scale(.97); }
 .tecla.menor { font-size: 15px; font-weight: 600; color: var(--gris); }
 
-.login-form { max-width: 440px; }
+.login-form { width: 100%; }
 .login-form .campo input { min-height: 56px; font-size: 18px; }
 .campo-clave { position: relative; }
 .campo-clave input { padding-right: 88px; }
