@@ -870,6 +870,11 @@ const App = (() => {
           'Cerrar sesión', 'btn-rojo');
         if (!ok) return;
         cerrar();
+        // Se refresca la lista de tarjetas ANTES de cerrar: después ya no hay
+        // sesión con qué pedirla, y la pantalla que sigue es justo la que las
+        // muestra. Así el relevo siempre deja la tablet con el equipo completo,
+        // aunque el último refresco haya sido de una versión anterior de la app.
+        await traerEquipo();
         await API.logout();
         usuario = null;
         vistaLogin();
