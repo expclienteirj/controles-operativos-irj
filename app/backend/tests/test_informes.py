@@ -442,3 +442,27 @@ class TestInformeDiaPorTurno(unittest.TestCase):
         # La fecha tiene que seguir siendo una fecha, no 'fecha·turno'.
         self.assertEqual(primera.split(";")[0], '"2026-07-05"')
         self.assertIn(primera.split(";")[1], ('"Mañana"', '"Tarde"'))
+
+
+
+class TestCsvNoEjecutaFormulas(unittest.TestCase):
+    """Las observaciones las escriben los auditores y se exportan tal cual."""
+
+    def test_un_texto_que_empieza_como_formula_queda_como_texto(self):
+        import informes
+        for peligroso in ("=HYPERLINK(\"http://x\")", "+1+1", "-2+3", "@SUMA(A1)",
+                          "\t=1", "\r=1"):
+            csv = informes._csv(["Observación"], [(peligroso,)]).decode("utf-8-sig")
+            celda = csv.splitlines()[1].strip('"')
+            self.assertTrue(celda.startswith("'"), repr(peligroso))
+
+    def test_un_texto_normal_no_se_toca(self):
+        import informes
+        csv = informes._csv(["a"], [("Falta jabón en baño 2",)]).decode("utf-8-sig")
+        self.assertIn('"Falta jabón en baño 2"', csv)
+
+    def test_los_numeros_no_se_marcan(self):
+        import informes
+        csv = informes._csv(["n"], [(-5,), (3.5,)]).decode("utf-8-sig")
+        self.assertIn('"-5"', csv)
+        self.assertNotIn("\'", csv)

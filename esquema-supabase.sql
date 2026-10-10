@@ -4,7 +4,7 @@
 -- Pegar entero en el SQL Editor y ejecutar. Es idempotente.
 
 CREATE OR REPLACE FUNCTION datetime(momento text)
-RETURNS text LANGUAGE sql STABLE AS $$
+RETURNS text LANGUAGE sql STABLE SET search_path = '' AS $$
     SELECT to_char(
         CASE WHEN momento = 'now' THEN (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')
              ELSE momento::timestamp END,
@@ -12,7 +12,7 @@ RETURNS text LANGUAGE sql STABLE AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION datetime(momento text, modificador text)
-RETURNS text LANGUAGE sql STABLE AS $$
+RETURNS text LANGUAGE sql STABLE SET search_path = '' AS $$
     SELECT to_char(
         (CASE WHEN momento = 'now' THEN (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')
               ELSE momento::timestamp END) + modificador::interval,
@@ -383,3 +383,21 @@ CREATE TABLE IF NOT EXISTS migraciones_aplicadas (
     nombre      TEXT PRIMARY KEY,
     aplicada_en TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Las dos consultas del ingreso y de la pestaña Usuarios que no tenían índice:
+-- cerrar las sesiones de una persona, y buscar sus ingresos y fallos en el log.
+CREATE INDEX IF NOT EXISTS idx_sesiones_usuario ON sesiones(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_log_usuario      ON auditoria_log(usuario_id, accion, fecha);
+
+-- RLS en TODAS las tablas del esquema público, sin políticas: nadie las toca por
+-- la API pública de Supabase (PostgREST). La app entra por conexión directa, que
+-- no pasa por RLS. Va al final y recorre las tablas para que una tabla nueva no
+-- se quede sin protección por olvido: ya pasó con `migraciones_aplicadas`, que
+-- Supabase marcó como error por tener RLS desactivado. Es idempotente.
+DO $$
+DECLARE t text;
+BEGIN
+    FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    END LOOP;
+END $$;

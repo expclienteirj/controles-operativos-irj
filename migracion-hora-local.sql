@@ -10,7 +10,7 @@
 BEGIN;
 
 CREATE OR REPLACE FUNCTION datetime(momento text)
-RETURNS text LANGUAGE sql STABLE AS $$
+RETURNS text LANGUAGE sql STABLE SET search_path = '' AS $$
     SELECT to_char(
         CASE WHEN momento = 'now' THEN (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')
              ELSE momento::timestamp END,
@@ -18,7 +18,7 @@ RETURNS text LANGUAGE sql STABLE AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION datetime(momento text, modificador text)
-RETURNS text LANGUAGE sql STABLE AS $$
+RETURNS text LANGUAGE sql STABLE SET search_path = '' AS $$
     SELECT to_char(
         (CASE WHEN momento = 'now' THEN (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')
               ELSE momento::timestamp END) + modificador::interval,
@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS migraciones_aplicadas (
     nombre      TEXT PRIMARY KEY,
     aplicada_en TEXT NOT NULL DEFAULT (datetime('now'))
 );
+-- Como todas las tablas: RLS activado y sin políticas, o sea que nadie la toca
+-- por la API pública de Supabase. La app entra por conexión directa, que no
+-- pasa por RLS.
+ALTER TABLE migraciones_aplicadas ENABLE ROW LEVEL SECURITY;
 
 DO $$
 BEGIN

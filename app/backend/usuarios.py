@@ -88,7 +88,9 @@ def validar_credencial(rol: str, valor: str) -> str:
     la cambia por un PIN, y un admin nunca baja a PIN.
     """
     if rol == "auditor":
-        if not re.fullmatch(rf"\d{{{PIN_LARGO}}}", valor or ""):
+        # [0-9] y no \d: \d acepta también cifras árabes o de ancho completo, y un
+        # PIN así no se podría escribir nunca en el teclado numérico de la tablet.
+        if not re.fullmatch(rf"[0-9]{{{PIN_LARGO}}}", valor or ""):
             raise ValueError(f"El PIN tiene que ser de {PIN_LARGO} dígitos, solo números")
         if pin_trivial(valor):
             raise ValueError("Ese PIN es muy fácil de adivinar (1234, 0000, un año…). "

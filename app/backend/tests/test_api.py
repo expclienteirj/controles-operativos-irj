@@ -2019,3 +2019,64 @@ class TestEquipoAPI(TestAPI):
                    {"usuario": "orden.a", "nombre": "Aaa Inicio", "rol": "auditor"})
         nombres = [a["nombre"] for a in self.auditor("GET", "/api/equipo")[1]["auditores"]]
         self.assertEqual(nombres, sorted(nombres))
+
+
+class TestEndurecimientoHTTP(TestAPI):
+    """Hallazgos de la auditoría: cada uno quedó fijado por un test."""
+
+    def _crudo(self, metodo, camino, cuerpo=None):
+        import http.client
+        con = http.client.HTTPConnection("127.0.0.1", self.puerto, timeout=10)
+        con.request(metodo, camino, body=cuerpo, headers={"Content-Type": "application/json"})
+        r = con.getresponse()
+        datos = r.read()
+        cabeceras = {k.lower(): v for k, v in r.getheaders()}
+        con.close()
+        return r.status, cabeceras, datos
+
+    def test_un_json_anidado_hasta_romper_el_parser_es_400_y_no_500(self):
+        """Miles de corchetes anidados agotan la pila del parser. Llegaba a
+        cualquiera sin sesión, porque el cuerpo se lee antes de autenticar."""
+        estado, _, datos = self._crudo("POST", "/api/login", b"[" * 6000)
+        self.assertEqual(estado, 400)
+        self.assertIn("JSON inválido", datos.decode())
+
+    def test_las_respuestas_de_la_api_no_se_pueden_incrustar_en_otro_sitio(self):
+        _, cab, _ = self._crudo("GET", "/api/version")
+        self.assertEqual(cab.get("x-frame-options"), "DENY")
+        self.assertEqual(cab.get("x-content-type-options"), "nosniff")
+        self.assertEqual(cab.get("referrer-policy"), "same-origin")
+
+    def test_la_api_no_abre_cors_a_otros_origenes(self):
+        import http.client
+        con = http.client.HTTPConnection("127.0.0.1", self.puerto, timeout=10)
+        con.request("GET", "/api/version", headers={"Origin": "https://otro-sitio.example"})
+        r = con.getresponse(); r.read()
+        cabeceras = {k.lower() for k, _ in r.getheaders()}
+        con.close()
+        self.assertNotIn("access-control-allow-origin", cabeceras)
+
+    def test_head_lleva_las_cabeceras_del_get_y_ningun_cuerpo(self):
+        """Los monitores de disponibilidad usan HEAD por defecto; un 501 se
+        leería como 'la app está caída'."""
+        est_get, cab_get, cuerpo_get = self._crudo("GET", "/api/version")
+        est_head, cab_head, cuerpo_head = self._crudo("HEAD", "/api/version")
+        self.assertEqual((est_get, est_head), (200, 200))
+        self.assertEqual(cuerpo_head, b"")
+        self.assertEqual(cab_head["content-length"], str(len(cuerpo_get)))
+
+    def test_un_head_no_deja_sin_cuerpo_a_los_get_siguientes(self):
+        """Con HTTP/1.1 la misma instancia atiende varios pedidos de una
+        conexión: el modo 'sin cuerpo' no puede pegarse."""
+        import http.client
+        con = http.client.HTTPConnection("127.0.0.1", self.puerto, timeout=10)
+        con.request("HEAD", "/api/version"); con.getresponse().read()
+        con.request("GET", "/api/version")
+        r = con.getresponse(); cuerpo = r.read()
+        con.close()
+        self.assertEqual(r.status, 200)
+        self.assertIn(b"estructura_ok", cuerpo)
+
+    def test_un_head_a_una_ruta_protegida_tambien_pide_sesion(self):
+        estado, _, _ = self._crudo("HEAD", "/api/usuarios")
+        self.assertEqual(estado, 401)

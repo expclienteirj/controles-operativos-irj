@@ -1,11 +1,15 @@
 {
   "version": 2,
-  "regions": ["gru1"],
+  "regions": [
+    "gru1"
+  ],
   "builds": [
     {
       "src": "api/index.py",
       "use": "@vercel/python",
-      "config": { "includeFiles": "app/backend/**" }
+      "config": {
+        "includeFiles": "app/backend/**"
+      }
     },
     {
       "src": "app/frontend/**",
@@ -13,8 +17,24 @@
     }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/index.py" },
-    { "src": "/", "dest": "/app/frontend/index.html" },
+    {
+      "src": "/(.*)",
+      "headers": {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "same-origin",
+        "Permissions-Policy": "camera=(self), microphone=(), geolocation=()"
+      },
+      "continue": true
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/",
+      "dest": "/app/frontend/index.html"
+    },
     {
       "src": "/sw.js",
       "dest": "/app/frontend/sw.js",
@@ -26,8 +46,13 @@
     {
       "src": "/(js|css)/(.*)",
       "dest": "/app/frontend/$1/$2",
-      "headers": { "Cache-Control": "no-cache" }
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
     },
-    { "src": "/(.*)", "dest": "/app/frontend/$1" }
+    {
+      "src": "/(.*)",
+      "dest": "/app/frontend/$1"
+    }
   ]
 }

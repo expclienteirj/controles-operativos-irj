@@ -831,13 +831,29 @@ def _lineas_resultado(clave: str, r: dict) -> list[tuple]:
 # Exports CSV (5.3)
 # ==========================================================================
 
+_INICIO_DE_FORMULA = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _neutralizar(celda):
+    """Que una celda de texto no se interprete como fórmula al abrir en Excel.
+
+    Las observaciones las escriben los auditores y se exportan tal cual: una que
+    empiece con `=` (por ejemplo `=HYPERLINK(...)`) se ejecutaría como fórmula en
+    la planilla de quien la abra. El apóstrofo inicial la deja como texto. Los
+    números (int/float) no son texto y no se tocan.
+    """
+    if isinstance(celda, str) and celda.startswith(_INICIO_DE_FORMULA):
+        return "'" + celda
+    return celda
+
+
 def _csv(encabezados, filas) -> bytes:
     salida = io.StringIO()
     # QUOTE_ALL evita que un texto con coma o punto y coma rompa la columna,
     # que es lo habitual en las observaciones del auditor.
     escritor = csv.writer(salida, delimiter=';', quoting=csv.QUOTE_ALL)
     escritor.writerow(encabezados)
-    escritor.writerows(filas)
+    escritor.writerows([_neutralizar(c) for c in fila] for fila in filas)
     # BOM: sin esto Excel en Windows abre los acentos rotos.
     return '﻿'.encode('utf-8') + salida.getvalue().encode('utf-8')
 

@@ -33,6 +33,10 @@ FORMATO_SQLITE = "YYYY-MM-DD HH24:MI:SS"
 
 # `datetime()` no existe en Postgres y el SQL de la app la da por sentada.
 #
+# `SET search_path = ''`: una función sin ruta fija resuelve sus nombres según la
+# sesión de quien la llama, y el linter de Supabase la marca como riesgo. Todo lo
+# que usa (to_char, now, los casts) vive en pg_catalog, que siempre se busca.
+#
 # 'now' es la hora de Argentina, igual que en SQLite (ver `db._datetime_local`):
 # las marcas son texto y se comparan como cadenas, así que las dos bases tienen
 # que medir con el mismo reloj.
@@ -46,7 +50,7 @@ ZONA = reloj.ZONA_POSTGRES
 
 FUNCIONES_SQL = f"""
 CREATE OR REPLACE FUNCTION datetime(momento text)
-RETURNS text LANGUAGE sql STABLE AS $$
+RETURNS text LANGUAGE sql STABLE SET search_path = '' AS $$
     SELECT to_char(
         CASE WHEN momento = 'now' THEN (now() AT TIME ZONE '{ZONA}')
              ELSE momento::timestamp END,
@@ -54,7 +58,7 @@ RETURNS text LANGUAGE sql STABLE AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION datetime(momento text, modificador text)
-RETURNS text LANGUAGE sql STABLE AS $$
+RETURNS text LANGUAGE sql STABLE SET search_path = '' AS $$
     SELECT to_char(
         (CASE WHEN momento = 'now' THEN (now() AT TIME ZONE '{ZONA}')
               ELSE momento::timestamp END) + modificador::interval,

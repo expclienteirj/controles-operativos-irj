@@ -447,6 +447,10 @@ CREATE INDEX IF NOT EXISTS idx_fotos_entidad    ON fotos(entidad, entidad_id);
 CREATE INDEX IF NOT EXISTS idx_elev_periodo     ON elevacion_eventos(periodo);
 CREATE INDEX IF NOT EXISTS idx_equip_baja       ON equipamiento_baja(equipamiento_id, desde);
 CREATE INDEX IF NOT EXISTS idx_artefacto_baja   ON artefacto_baja(nucleo_id, desde);
+-- Las dos consultas del ingreso y de la pestaña Usuarios que no tenían índice:
+-- cerrar las sesiones de una persona, y buscar sus ingresos y fallos en el log.
+CREATE INDEX IF NOT EXISTS idx_sesiones_usuario ON sesiones(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_log_usuario      ON auditoria_log(usuario_id, accion, fecha);
 
 -- Constancia de las migraciones de DATOS que ya se corrieron. Existe porque hay
 -- correcciones que no se pueden repetir sin dañar la base: pasar las marcas de

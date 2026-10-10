@@ -34,3 +34,7 @@ venv/
 *.pdf
 *.docx
 *.xlsx
+
+# Permisos locales de Claude Code: son de cada máquina y guardan comandos enteros,
+# con los tokens de sesión que haya tenido el comando. Ya hubo uno subido a GitHub.
+.claude/settings.local.json

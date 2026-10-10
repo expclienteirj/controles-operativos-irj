@@ -428,3 +428,15 @@ class TestMigracionDelIngreso(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPinSoloAscii(unittest.TestCase):
+    def test_un_pin_con_cifras_de_otro_alfabeto_se_rechaza(self):
+        """`\\d` acepta cifras árabes o de ancho completo: un PIN así no se podría
+        escribir nunca en el teclado numérico de la tablet."""
+        for raro in ("٣٣٤٧", "５８２１", "５８2１"):
+            with self.assertRaises(ValueError, msg=raro):
+                usuarios.validar_credencial("auditor", raro)
+
+    def test_el_pin_normal_sigue_pasando(self):
+        self.assertEqual(usuarios.validar_credencial("auditor", "5821"), "pin")

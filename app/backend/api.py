@@ -1648,6 +1648,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", tipo)
         self.send_header("Content-Length", str(len(cuerpo)))
         self.send_header("X-Content-Type-Options", "nosniff")
+        # La app tiene una pantalla de PIN: si se pudiera incrustar en el marco de
+        # otro sitio, ese sitio podría superponerle botones propios (clickjacking).
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "same-origin")
         if descarga:
             # El nombre se genera en el servidor a partir del período, así que
             # no puede traer comillas ni saltos; aun así se sanea por si acaso.
@@ -1658,7 +1662,10 @@ class Handler(BaseHTTPRequestHandler):
         # auditoría que no puede servirse viejo.
         self.send_header("Cache-Control", cache or "no-store")
         self.end_headers()
-        self.wfile.write(cuerpo)
+        # Un HEAD lleva las mismas cabeceras que el GET (Content-Length incluido)
+        # y ningún cuerpo. Los monitores de disponibilidad usan HEAD por defecto.
+        if not getattr(self, "_sin_cuerpo", False):
+            self.wfile.write(cuerpo)
 
     def _sesion(self, conn):
         auth = self.headers.get("Authorization", "")
@@ -1699,7 +1706,10 @@ class Handler(BaseHTTPRequestHandler):
         crudo = self.rfile.read(largo)
         try:
             return json.loads(crudo)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, RecursionError):
+            # RecursionError: miles de "[" anidados agotan la pila del parser.
+            # Es una entrada inválida como cualquier otra, no un fallo del
+            # servidor, y no tiene por qué dejar un traceback en el log.
             raise ErrorAPI("JSON inválido")
 
     def _ip_cliente(self):
@@ -1719,6 +1729,12 @@ class Handler(BaseHTTPRequestHandler):
             return None
 
     def _manejar(self, metodo):
+        # Se fija en cada pedido y no una vez: con HTTP/1.1 la misma instancia
+        # atiende varios pedidos de una conexión, y un HEAD no puede dejar a los
+        # GET siguientes sin cuerpo.
+        self._sin_cuerpo = metodo == "HEAD"
+        if self._sin_cuerpo:
+            metodo = "GET"
         camino = urlparse(self.path).path
         if not camino.startswith("/api/"):
             return self._servir_estatico(camino)
@@ -1783,6 +1799,7 @@ class Handler(BaseHTTPRequestHandler):
                         cache="no-cache" if es_shell else "public, max-age=86400")
 
     def do_GET(self):     self._manejar("GET")      # noqa: E704
+    def do_HEAD(self):    self._manejar("HEAD")     # noqa: E704
     def do_POST(self):    self._manejar("POST")     # noqa: E704
     def do_PUT(self):     self._manejar("PUT")      # noqa: E704
     def do_DELETE(self):  self._manejar("DELETE")   # noqa: E704
